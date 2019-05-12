@@ -14,6 +14,7 @@
 /* TODO
  * - TLS
  * - config parsing
+ * - Prevent http overrun
  */
 
 static size_t socks = 0;
@@ -120,13 +121,33 @@ int network_socket(char* host, char* port, int socktype, int listener){
 	return fd;
 }
 
+int ws_close(websocket* ws){
+	size_t p;
+
+	if(ws->fd >= 0){
+		close(ws->fd);
+		ws->fd = -1;
+	}
+
+	for(p = 0; p < ws->protocols; p++){
+		if(ws->protocol[p].fd >= 0){
+			close(ws->protocol[p].fd);
+			ws->protocol[p].fd = -1;
+			free(ws->protocol[p].name);
+			ws->protocol[p].name = NULL;
+		}
+	}
+
+	ws->read_buffer_offset = 0;
+
+	return 0;
+}
+
 int ws_accept(int listen_fd){
 	size_t n = 0;
-	struct sockaddr_storage sa_storage;
-	socklen_t sa_length;
 
 	websocket ws = {
-		.fd = accept(listen_fd, (struct sockaddr*)&sa_storage, &sa_length)
+		.fd = accept(listen_fd, NULL, NULL)
 	};
 
 	//try to find a slot to occupy
@@ -154,32 +175,63 @@ int ws_accept(int listen_fd){
 }
 
 int ws_data(websocket* ws){
-	//TODO
-	return -1;
+	ssize_t bytes_read, u, bytes_left = sizeof(ws->read_buffer) - ws->read_buffer_offset;
+
+	bytes_read = recv(ws->fd, ws->read_buffer + ws->read_buffer_offset, bytes_left - 1, 0);
+	if(bytes_read < 0){
+		fprintf(stderr, "Failed to receive from websocket: %s\n", strerror(errno));
+		ws_close(ws);
+		return 0;
+	}
+	else if(bytes_read == 0){
+		//client closed connection
+		ws_close(ws);
+		return 0;
+	}
+
+	//terminate new data
+	ws->read_buffer[ws->read_buffer_offset + bytes_read] = 0;
+	
+	switch(ws->state){
+		case ws_new:
+		case ws_http:
+			//scan for newline, handle line
+			for(u = 0; u < bytes_read - 1; u++){
+				if(!strncmp((char*) ws->read_buffer + ws->read_buffer_offset + u, "\r\n", 2)){
+					//terminate line
+					ws->read_buffer[ws->read_buffer_offset + u] = 0;
+
+					fprintf(stderr, "Line: %s\n", ws->read_buffer);
+
+					//remove from buffer
+					bytes_read -= (u + 2);
+					memmove(ws->read_buffer, ws->read_buffer + ws->read_buffer_offset + u + 2, bytes_read);
+					ws->read_buffer_offset = 0;
+
+					//restart from the beginning
+					u = -1;
+				}
+			}
+			break;
+		//case ws_rfc6455:
+			//TODO parse websocket encap, forward to peer
+	}
+
+	//update read buffer offset
+	ws->read_buffer_offset = bytes_read;
+
+	//disconnect spammy clients
+	if(sizeof(ws->read_buffer) - ws->read_buffer_offset < 2){
+		fprintf(stderr, "Disconnecting misbehaving client\n");
+		ws_close(ws);
+		return 0;
+	}
+	return 0;
 }
 
 int ws_peer_data(websocket* ws, size_t proto){
 	//TODO
 	return -1;
-}
-
-int ws_close(websocket* ws){
-	size_t p;
-
-	if(ws->fd >= 0){
-		close(ws->fd);
-		ws->fd = -1;
-	}
-
-	for(p = 0; p < ws->protocols; p++){
-		if(ws->protocol[p].fd >= 0){
-			close(ws->protocol[p].fd);
-			ws->protocol[p].fd = -1;
-			free(ws->protocol[p].name);
-		}
-	}
-
-	return 0;
 }
 
 int main(int argc, char** argv){
