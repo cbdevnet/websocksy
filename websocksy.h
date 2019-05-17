@@ -21,17 +21,18 @@ struct {
 	.backend.name = "internal"
 };
 
-typedef struct {
-	char* name;
-	int fd;
-} ws_proto;
-
 typedef struct /*_web_socket*/ {
+	int fd;
+	int peer;
 	uint8_t read_buffer[WS_MAX_LINE];
 	size_t read_buffer_offset;
 	ws_state state;
 
-	int fd;
+	char* request_path;
+	unsigned websocket_version;
+	char* socket_key;
+	unsigned want_upgrade;
+
 	size_t protocols;
-	ws_proto* protocol;
+	char** protocol;
 } websocket;
