@@ -10,6 +10,24 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+/* TODO
+ * - TLS
+ * - config parsing
+ * - backend config
+ * - framing config / per peer?
+ * - per-connection framing state
+ */
+
+/*
+ * Main loop condition, to be set from signal handler
+ */
+static volatile sig_atomic_t shutdown_requested = 0;
+
+#include "websocksy.h"
+
+/*
+ * Lowercase input string in-place
+ */
 char* xstr_lower(char* in){
 	size_t n;
 	for(n = 0; n < strlen(in); n++){
@@ -18,24 +36,33 @@ char* xstr_lower(char* in){
 	return in;
 }
 
-#include "websocksy.h"
 #include "network.c"
 #include "ws_proto.c"
 
-/* TODO
- * - TLS
- * - config parsing
- * - Prevent http overrun
+/*
+ * WebSocket interface & peer discovery configuration
  */
+static struct {
+	char* host;
+	char* port;
+	ws_backend backend;
+} config = {
+	.host = "::",
+	.port = "8001"
+};
 
-static volatile sig_atomic_t shutdown_requested = 0;
-
+/*
+ * Signal handler, attached to SIGINT
+ */
 void signal_handler(int signum){
 	shutdown_requested = 1;
 }
 
+/*
+ * Usage info
+ */
 int usage(char* fn){
-	fprintf(stderr, "\nwebsocksy - Proxy between websockets and 'real' sockets\n");
+	fprintf(stderr, "\nwebsocksy v%s - Proxy between websockets and 'real' sockets\n", WEBSOCKSY_VERSION);
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "\t%s [-p <port>] [-l <listen address>] [-b <targeting backend>]\n", fn);
 	return EXIT_FAILURE;
@@ -56,6 +83,7 @@ int main(int argc, char** argv){
 	size_t n;
 	int listen_fd = -1, status, max_fd;
 
+	//parse command line arguments
 	if(args_parse(argc - 1, argv + 1)){
 		exit(usage(argv[0]));
 	}
@@ -66,6 +94,7 @@ int main(int argc, char** argv){
 		exit(usage(argv[0]));
 	}
 
+	//attach signal handler to catch Ctrl-C
 	signal(SIGINT, signal_handler);
 
 	//core loop
@@ -77,16 +106,16 @@ int main(int argc, char** argv){
 
 		//push all fds to the select set
 		for(n = 0; n < socks; n++){
-			if(sock[n].fd >= 0){
-				FD_SET(sock[n].fd, &read_fds);
-				if(max_fd < sock[n].fd){
-					max_fd = sock[n].fd;
+			if(sock[n].ws_fd >= 0){
+				FD_SET(sock[n].ws_fd, &read_fds);
+				if(max_fd < sock[n].ws_fd){
+					max_fd = sock[n].ws_fd;
 				}
 				
-				if(sock[n].peer >= 0){
-					FD_SET(sock[n].peer, &read_fds);
-					if(max_fd < sock[n].peer){
-						max_fd = sock[n].peer;
+				if(sock[n].peer_fd >= 0){
+					FD_SET(sock[n].peer_fd, &read_fds);
+					if(max_fd < sock[n].peer_fd){
+						max_fd = sock[n].peer_fd;
 					}
 				}
 			}
@@ -109,16 +138,16 @@ int main(int argc, char** argv){
 				}
 			}
 
-			//websocket & peer data
+			//websocket or peer data ready
 			for(n = 0; n < socks; n++){
-				if(sock[n].fd >= 0){
-					if(FD_ISSET(sock[n].fd, &read_fds)){
+				if(sock[n].ws_fd >= 0){
+					if(FD_ISSET(sock[n].ws_fd, &read_fds)){
 						if(ws_data(sock + n)){
 							break;
 						}
 					}
 
-					if(sock[n].peer >= 0 && FD_ISSET(sock[n].peer, &read_fds)){
+					if(sock[n].peer_fd >= 0 && FD_ISSET(sock[n].peer_fd, &read_fds)){
 						if(ws_peer_data(sock + n)){
 							break;
 						}

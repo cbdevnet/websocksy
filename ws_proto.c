@@ -17,15 +17,23 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	}
 	ws->state = ws_closed;
 
-	if(ws->fd >= 0){
-		close(ws->fd);
-		ws->fd = -1;
+	if(ws->ws_fd >= 0){
+		close(ws->ws_fd);
+		ws->ws_fd = -1;
 	}
 
-	if(ws->peer >= 0){
-		close(ws->peer);
-		ws->peer = -1;
+	if(ws->peer_fd >= 0){
+		close(ws->peer_fd);
+		ws->peer_fd = -1;
 	}
+
+	for(p = 0; p < ws->headers; p++){
+		free(ws->header[p].tag);
+		ws->header[p].tag = NULL;
+		free(ws->header[p].value);
+		ws->header[p].value = NULL;
+	}
+	ws->headers = 0;
 
 	for(p = 0; p < ws->protocols; p++){
 		free(ws->protocol[p]);
@@ -51,13 +59,13 @@ int ws_accept(int listen_fd){
 	size_t n = 0;
 
 	websocket ws = {
-		.fd = accept(listen_fd, NULL, NULL),
-		.peer = -1
+		.ws_fd = accept(listen_fd, NULL, NULL),
+		.peer_fd = -1
 	};
 
 	//try to find a slot to occupy
 	for(n = 0; n < socks; n++){
-		if(sock[n].fd == -1){
+		if(sock[n].ws_fd == -1){
 			break;
 		}
 	}
@@ -66,7 +74,7 @@ int ws_accept(int listen_fd){
 	if(n == socks){
 		sock = realloc(sock, (socks + 1) * sizeof(websocket));
 		if(!sock){
-			close(ws.fd);
+			close(ws.ws_fd);
 			fprintf(stderr, "Failed to allocate memory\n");
 			return 1;
 		}
@@ -109,9 +117,9 @@ int ws_upgrade_http(websocket* ws){
 	if(ws->websocket_version == 13
 			&& ws->socket_key
 			&& ws->want_upgrade == 3){
-		if(network_send_str(ws->fd, "HTTP/1.1 101 Upgrading\r\n")
-				|| network_send_str(ws->fd, "Upgrade: websocket\r\n")
-				|| network_send_str(ws->fd, "Connection: Upgrade\r\n")){
+		if(network_send_str(ws->ws_fd, "HTTP/1.1 101 Upgrading\r\n")
+				|| network_send_str(ws->ws_fd, "Upgrade: websocket\r\n")
+				|| network_send_str(ws->ws_fd, "Connection: Upgrade\r\n")){
 			ws_close(ws, ws_close_http, NULL);
 			return 0;
 		}
@@ -134,8 +142,8 @@ int ws_upgrade_http(websocket* ws){
 		memcpy(ws_accept_key + encode_offset, "\r\n\0", 3);
 
 		//send websocket accept key
-		if(network_send_str(ws->fd, "Sec-WebSocket-Accept: ")
-					|| network_send_str(ws->fd, ws_accept_key)){
+		if(network_send_str(ws->ws_fd, "Sec-WebSocket-Accept: ")
+					|| network_send_str(ws->ws_fd, ws_accept_key)){
 			ws_close(ws, ws_close_http, NULL);
 			return 0;
 		}
@@ -144,7 +152,7 @@ int ws_upgrade_http(websocket* ws){
 		//TODO find/connect peer
 
 		ws->state = ws_open;
-		if(network_send_str(ws->fd, "\r\n")){
+		if(network_send_str(ws->ws_fd, "\r\n")){
 			ws_close(ws, ws_close_http, NULL);
 			return 0;
 		}
@@ -196,7 +204,18 @@ int ws_handle_http(websocket* ws){
 	else if(!strcmp(header, "Connection") && strstr(xstr_lower(value), "upgrade")){
 		ws->want_upgrade |= 2;
 	}
-	//TODO parse websocket protocol offers
+	else if(!strcmp(header, "Sec-WebSocket-Protocol")){
+		//TODO parse websocket protocol offers
+	}
+	else if(ws->headers < WS_HEADER_LIMIT){
+		ws->header[ws->headers].tag = strdup(header);
+		ws->header[ws->headers].value = strdup(value);
+		ws->headers++;
+	}
+	else{
+		//limit the number of stored headers to prevent abuse
+		ws_close(ws, ws_close_http, "500 Header limit");
+	}
 	return 0;
 }
 
@@ -316,7 +335,7 @@ int ws_data(websocket* ws){
 	ssize_t bytes_read, n, bytes_left = sizeof(ws->read_buffer) - ws->read_buffer_offset;
 	int rv = 0;
 
-	bytes_read = recv(ws->fd, ws->read_buffer + ws->read_buffer_offset, bytes_left - 1, 0);
+	bytes_read = recv(ws->ws_fd, ws->read_buffer + ws->read_buffer_offset, bytes_left - 1, 0);
 	if(bytes_read < 0){
 		fprintf(stderr, "Failed to receive from websocket: %s\n", strerror(errno));
 		ws_close(ws, ws_close_unexpected, NULL);
