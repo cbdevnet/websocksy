@@ -1,12 +1,14 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <nettle/sha1.h>
+#include <nettle/base64.h>
 
 #define WS_MAX_LINE 16384
 
 typedef enum {
 	ws_new = 0,
 	ws_http,
-	ws_rfc6455
+	ws_open
 } ws_state;
 
 struct {

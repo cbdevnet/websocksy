@@ -1,5 +1,7 @@
 #include <ctype.h>
 
+#define RFC6455_MAGIC_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
 static size_t socks = 0;
 static websocket* sock = NULL;
 
@@ -96,15 +98,52 @@ int ws_handle_new(websocket* ws){
 
 int ws_upgrade_http(websocket* ws){
 	if(ws->websocket_version == 13
+			&& ws->socket_key
 			&& ws->want_upgrade){
+		if(network_send_str(ws->fd, "HTTP/1.1 101 Upgrading\r\n")
+				|| network_send_str(ws->fd, "Upgrade: websocket\r\n")
+				|| network_send_str(ws->fd, "Connection: Upgrade\r\n")){
+			//TODO might want to disconnect here
+			return 1;
+		}
 
-		return 0;
+		//calculate the websocket key which for some reason is defined as
+		//base64(sha1(concat(trim(client-key), "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")))
+		//which requires not one but 2 unnecessarily complex operations
+		size_t encode_offset = 0;
+		struct sha1_ctx ws_accept_ctx;
+		struct base64_encode_ctx ws_accept_encode;
+		uint8_t ws_accept_digest[SHA1_DIGEST_SIZE];
+		char ws_accept_key[BASE64_ENCODE_LENGTH(SHA1_DIGEST_SIZE) + 3] = "";
+		sha1_init(&ws_accept_ctx);
+		sha1_update(&ws_accept_ctx, strlen(ws->socket_key), (uint8_t*) ws->socket_key);
+		sha1_update(&ws_accept_ctx, strlen(RFC6455_MAGIC_KEY), (uint8_t*) RFC6455_MAGIC_KEY);
+		sha1_digest(&ws_accept_ctx, sizeof(ws_accept_digest), (uint8_t*) &ws_accept_digest);
+		base64_encode_init(&ws_accept_encode);
+		encode_offset = base64_encode_update(&ws_accept_encode, (uint8_t*) ws_accept_key, SHA1_DIGEST_SIZE, ws_accept_digest);
+		encode_offset += base64_encode_final(&ws_accept_encode, (uint8_t*) ws_accept_key + encode_offset);
+		memcpy(ws_accept_key + encode_offset, "\r\n\0", 3);
+
+		//send websocket accept key
+		if(network_send_str(ws->fd, "Sec-WebSocket-Accept: ")
+					|| network_send_str(ws->fd, ws_accept_key)){
+			return 1;
+		}
+
+		//TODO Sec-Websocket-Protocol
+		//TODO find/connect peer
+
+		ws->state = ws_open;
+		return network_send_str(ws->fd, "\r\n") ? 1 : 0;
 	}
+	//TODO RFC 4.2.2.4: An unsupported version must be answered with HTTP 426
 	return 1;
 }
 
 int ws_handle_http(websocket* ws){
 	char* header, *value;
+	ssize_t p;
+
 	if(!ws->read_buffer[0]){
 		return ws_upgrade_http(ws);
 	}
@@ -130,6 +169,10 @@ int ws_handle_http(websocket* ws){
 		ws->websocket_version = strtoul(value, NULL, 10);
 	}
 	else if(!strcmp(header, "Sec-WebSocket-Key")){
+		//right-trim the key
+		for(p = strlen(value) - 1; p >= 0 && isspace(value[p]); p--){
+			value[p] = 0;
+		}
 		ws->socket_key = strdup(value);
 	}
 	else if(!strcmp(header, "Upgrade") && !strcmp(value, "websocket")){
@@ -139,8 +182,15 @@ int ws_handle_http(websocket* ws){
 	return 0;
 }
 
+int ws_frame(websocket* ws){
+	//TODO check for complete WS frame
+	//read/handle/forward data
+	fprintf(stderr, "Incoming websocket data\n");
+	return 0;
+}
+
 int ws_data(websocket* ws){
-	ssize_t bytes_read, u, bytes_left = sizeof(ws->read_buffer) - ws->read_buffer_offset;
+	ssize_t bytes_read, n, bytes_left = sizeof(ws->read_buffer) - ws->read_buffer_offset;
 	int rv = 0;
 
 	bytes_read = recv(ws->fd, ws->read_buffer + ws->read_buffer_offset, bytes_left - 1, 0);
@@ -162,10 +212,10 @@ int ws_data(websocket* ws){
 		case ws_new:
 		case ws_http:
 			//scan for newline, handle line
-			for(u = 0; u < bytes_read - 1; u++){
-				if(!strncmp((char*) ws->read_buffer + ws->read_buffer_offset + u, "\r\n", 2)){
+			for(n = 0; n < bytes_read - 1; n++){
+				if(!strncmp((char*) ws->read_buffer + ws->read_buffer_offset + n, "\r\n", 2)){
 					//terminate line
-					ws->read_buffer[ws->read_buffer_offset + u] = 0;
+					ws->read_buffer[ws->read_buffer_offset + n] = 0;
 
 					if(ws->state == ws_new){
 						rv |= ws_handle_new(ws);
@@ -176,17 +226,17 @@ int ws_data(websocket* ws){
 					//TODO handle rv
 
 					//remove from buffer
-					bytes_read -= (u + 2);
-					memmove(ws->read_buffer, ws->read_buffer + ws->read_buffer_offset + u + 2, bytes_read);
+					bytes_read -= (n + 2);
+					memmove(ws->read_buffer, ws->read_buffer + ws->read_buffer_offset + n + 2, bytes_read);
 					ws->read_buffer_offset = 0;
 
 					//restart from the beginning
-					u = -1;
+					n = -1;
 				}
 			}
 			break;
-		//case ws_rfc6455:
-			//TODO parse websocket encap, forward to peer
+		case ws_open:
+			rv |= ws_frame(ws);
 	}
 
 	//update read buffer offset

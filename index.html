@@ -1,8 +1,16 @@
 <html>
 	<head>
 		<script type="text/javascript">
+			var webSocket = null;
+
+			function openSocket(){
+				webSocket = new WebSocket("ws://localhost:8001/foo/bar");
+				webSocket.onclose = openSocket;
+			}
+
 			function init(){
-				var webSocket = new WebSocket("ws://localhost:8001/foo/bar");
+				openSocket();
+				setInterval(function(){webSocket.send("foo");}, 1000);
 			}
 		</script>
 	</head>
