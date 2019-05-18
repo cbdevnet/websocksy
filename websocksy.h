@@ -8,7 +8,8 @@
 typedef enum {
 	ws_new = 0,
 	ws_http,
-	ws_open
+	ws_open,
+	ws_closed
 } ws_state;
 
 //RFC Section 5.2
@@ -20,6 +21,19 @@ typedef enum {
 	ws_frame_ping = 9,
 	ws_frame_pong = 10
 } ws_operation;
+
+//RFC Section 7.4.1
+typedef enum {
+	ws_close_http = 100,
+	ws_close_normal = 1000,
+	ws_close_shutdown = 1001,
+	ws_close_proto = 1002,
+	ws_close_data = 1003,
+	ws_close_format = 1007,
+	ws_close_policy = 1008,
+	ws_close_limit = 1009,
+	ws_close_unexpected = 1011
+} ws_close_reason;
 
 struct {
 	char* host;

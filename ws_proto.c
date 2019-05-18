@@ -9,8 +9,13 @@
 static size_t socks = 0;
 static websocket* sock = NULL;
 
-int ws_close(websocket* ws){
+int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	size_t p;
+
+	if(ws->state == ws_open && reason){
+		//TODO send close frame
+	}
+	ws->state = ws_closed;
 
 	if(ws->fd >= 0){
 		close(ws->fd);
@@ -107,8 +112,8 @@ int ws_upgrade_http(websocket* ws){
 		if(network_send_str(ws->fd, "HTTP/1.1 101 Upgrading\r\n")
 				|| network_send_str(ws->fd, "Upgrade: websocket\r\n")
 				|| network_send_str(ws->fd, "Connection: Upgrade\r\n")){
-			//TODO might want to disconnect here
-			return 1;
+			ws_close(ws, ws_close_http, NULL);
+			return 0;
 		}
 
 		//calculate the websocket key which for some reason is defined as
@@ -131,14 +136,19 @@ int ws_upgrade_http(websocket* ws){
 		//send websocket accept key
 		if(network_send_str(ws->fd, "Sec-WebSocket-Accept: ")
 					|| network_send_str(ws->fd, ws_accept_key)){
-			return 1;
+			ws_close(ws, ws_close_http, NULL);
+			return 0;
 		}
 
 		//TODO Sec-Websocket-Protocol
 		//TODO find/connect peer
 
 		ws->state = ws_open;
-		return network_send_str(ws->fd, "\r\n") ? 1 : 0;
+		if(network_send_str(ws->fd, "\r\n")){
+			ws_close(ws, ws_close_http, NULL);
+			return 0;
+		}
+		return 0;
 	}
 	//TODO RFC 4.2.2.4: An unsupported version must be answered with HTTP 426
 	return 1;
@@ -153,15 +163,15 @@ int ws_handle_http(websocket* ws){
 	}
 	else if(isspace(ws->read_buffer[0])){
 		//i hate header folding
-		//TODO disconnect client
-		return 1;
+		ws_close(ws, ws_close_http, "500 Header folding");
+		return 0;
 	}
 	else{
 		header = (char*) ws->read_buffer;
 		value = strchr(header, ':');
 		if(!value){
-			//TODO disconnect
-			return 1;
+			ws_close(ws, ws_close_http, "500 Header format");
+			return 0;
 		}
 		*value = 0;
 		value++;
@@ -259,7 +269,7 @@ size_t ws_frame(websocket* ws){
 
 	//RFC Section 5.1: If the client sends an unmasked frame, close the connection
 	if(!WS_GET_MASK(ws->read_buffer[1])){
-		ws_close(ws);
+		ws_close(ws, ws_close_proto, "Unmasked client frame");
 		return 0;
 	}
 
@@ -269,6 +279,9 @@ size_t ws_frame(websocket* ws){
 			payload[u] = payload[u] ^ masking_key[u % 4];
 		}
 	}
+
+	//TODO handle fragmentation
+	//TODO handle control frames within fragmented frames
 
 	fprintf(stderr, "Incoming websocket data: %s %s OP %02X LEN %u %lu\n",
 			WS_GET_FIN(ws->read_buffer[0]) ? "FIN" : "CONT",
@@ -285,7 +298,7 @@ size_t ws_frame(websocket* ws){
 			//TODO forward to peer
 			break;
 		case ws_frame_close:
-			//TODO close connection
+			ws_close(ws, ws_close_normal, "Client requested termination");
 			break;
 		case ws_frame_ping:
 			break;
@@ -306,12 +319,12 @@ int ws_data(websocket* ws){
 	bytes_read = recv(ws->fd, ws->read_buffer + ws->read_buffer_offset, bytes_left - 1, 0);
 	if(bytes_read < 0){
 		fprintf(stderr, "Failed to receive from websocket: %s\n", strerror(errno));
-		ws_close(ws);
+		ws_close(ws, ws_close_unexpected, NULL);
 		return 0;
 	}
 	else if(bytes_read == 0){
 		//client closed connection
-		ws_close(ws);
+		ws_close(ws, ws_close_unexpected, NULL);
 		return 0;
 	}
 
@@ -328,12 +341,11 @@ int ws_data(websocket* ws){
 					ws->read_buffer[ws->read_buffer_offset + n] = 0;
 
 					if(ws->state == ws_new){
-						rv |= ws_handle_new(ws);
+						ws_handle_new(ws);
 					}
 					else{
-						rv |= ws_handle_http(ws);
+						ws_handle_http(ws);
 					}
-					//TODO handle rv
 
 					//remove from buffer
 					bytes_read -= (n + 2);
@@ -353,12 +365,16 @@ int ws_data(websocket* ws){
 				memmove(ws->read_buffer, ws->read_buffer + n, ws->read_buffer_offset - n);
 				ws->read_buffer_offset -= n;
 			}
+		//this should never be reached, as ws_close also closes the client fd
+		case ws_closed:
+			fprintf(stderr, "This should not have happened\n");
+			break;
 	}
 
 	//disconnect spammy clients
 	if(sizeof(ws->read_buffer) - ws->read_buffer_offset < 2){
 		fprintf(stderr, "Disconnecting misbehaving client\n");
-		ws_close(ws);
+		ws_close(ws, ws_close_limit, "Receive size limit exceeded");
 		return 0;
 	}
 	return rv;
@@ -367,7 +383,7 @@ int ws_data(websocket* ws){
 void ws_cleanup(){
 	size_t n;
 	for(n = 0; n < socks; n++){
-		ws_close(sock + n);
+		ws_close(sock + n, ws_close_shutdown, "Shutting down");
 	}
 
 	free(sock);
