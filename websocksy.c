@@ -8,6 +8,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ctype.h>
+
+char* xstr_lower(char* in){
+	size_t n;
+	for(n = 0; n < strlen(in); n++){
+		in[n] = tolower(in[n]);
+	}
+	return in;
+}
 
 #include "websocksy.h"
 #include "network.c"

@@ -1,6 +1,10 @@
-#include <ctype.h>
-
 #define RFC6455_MAGIC_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+#define WS_GET_FIN(a) ((a & 0x80) >> 7)
+#define WS_GET_RESERVED(a) ((a & 0xE0) >> 4)
+#define WS_GET_OP(a) ((a & 0x0F))
+#define WS_GET_MASK(a) ((a & 0x80) >> 7)
+#define WS_GET_LEN(a) ((a & 0x7F))
 
 static size_t socks = 0;
 static websocket* sock = NULL;
@@ -99,7 +103,7 @@ int ws_handle_new(websocket* ws){
 int ws_upgrade_http(websocket* ws){
 	if(ws->websocket_version == 13
 			&& ws->socket_key
-			&& ws->want_upgrade){
+			&& ws->want_upgrade == 3){
 		if(network_send_str(ws->fd, "HTTP/1.1 101 Upgrading\r\n")
 				|| network_send_str(ws->fd, "Upgrade: websocket\r\n")
 				|| network_send_str(ws->fd, "Connection: Upgrade\r\n")){
@@ -165,6 +169,7 @@ int ws_handle_http(websocket* ws){
 		}
 	}
 
+	//RFC 4.2.1 checks
 	if(!strcmp(header, "Sec-WebSocket-Version")){
 		ws->websocket_version = strtoul(value, NULL, 10);
 	}
@@ -175,18 +180,123 @@ int ws_handle_http(websocket* ws){
 		}
 		ws->socket_key = strdup(value);
 	}
-	else if(!strcmp(header, "Upgrade") && !strcmp(value, "websocket")){
-		ws->want_upgrade = 1;
+	else if(!strcmp(header, "Upgrade") && !strcasecmp(value, "websocket")){
+		ws->want_upgrade |= 1;
+	}
+	else if(!strcmp(header, "Connection") && strstr(xstr_lower(value), "upgrade")){
+		ws->want_upgrade |= 2;
 	}
 	//TODO parse websocket protocol offers
 	return 0;
 }
 
-int ws_frame(websocket* ws){
-	//TODO check for complete WS frame
-	//read/handle/forward data
-	fprintf(stderr, "Incoming websocket data\n");
-	return 0;
+//returns bytes handled
+size_t ws_frame(websocket* ws){
+	size_t u;
+	uint64_t payload_length = 0;
+	uint16_t* payload_len16 = (uint16_t*) (ws->read_buffer + 2);
+	uint64_t* payload_len64 = (uint64_t*) (ws->read_buffer + 2);
+	uint8_t* masking_key = NULL, *payload = ws->read_buffer + 2;
+
+	//need at least the header bits
+	if(ws->read_buffer_offset < 2){
+		return 0;
+	}
+
+	if(WS_GET_RESERVED(ws->read_buffer[0])){
+		//reserved bits set without any extensions
+		//RFC 5.2 says we MUST close the connection
+		//ignoring it for now
+	}
+
+	//calculate the payload length (could've used a uint64 and be done with it...)
+	//TODO test this for the bigger frames
+	payload_length = WS_GET_LEN(ws->read_buffer[1]);
+	if(WS_GET_MASK(ws->read_buffer[1])){
+		if(ws->read_buffer_offset < 6){
+			return 0;
+		}
+		masking_key = ws->read_buffer + 2;
+		payload = ws->read_buffer + 6;
+	}
+
+	if(payload_length == 126){
+		//16-bit payload length
+		if(ws->read_buffer_offset < 4){
+			return 0;
+		}
+		payload_length = htobe16(*payload_len16);
+		payload = ws->read_buffer + 4;
+		if(WS_GET_MASK(ws->read_buffer[1])){
+			if(ws->read_buffer_offset < 8){
+				return 0;
+			}
+			masking_key = ws->read_buffer + 4;
+			payload = ws->read_buffer + 8;
+		}
+	}
+	else if(payload_length == 127){
+		//64-bit payload length
+		if(ws->read_buffer_offset < 10){
+			return 0;
+		}
+		payload_length = htobe64(*payload_len64);
+		payload = ws->read_buffer + 10;
+		if(WS_GET_MASK(ws->read_buffer[1])){
+			if(ws->read_buffer_offset < 14){
+				return 0;
+			}
+			masking_key = ws->read_buffer + 10;
+			payload = ws->read_buffer + 14;
+		}
+	}
+
+	//check for complete WS frame
+	if(ws->read_buffer_offset < (payload - ws->read_buffer) + payload_length){
+		//fprintf(stderr, "Incomplete payload: offset %lu, want %lu\n", ws->read_buffer_offset, (payload - ws->read_buffer) + payload_length);
+		return 0;
+	}
+
+	//RFC Section 5.1: If the client sends an unmasked frame, close the connection
+	if(!WS_GET_MASK(ws->read_buffer[1])){
+		ws_close(ws);
+		return 0;
+	}
+
+	//unmask data
+	if(WS_GET_MASK(ws->read_buffer[1])){
+		for(u = 0; u < payload_length; u++){
+			payload[u] = payload[u] ^ masking_key[u % 4];
+		}
+	}
+
+	fprintf(stderr, "Incoming websocket data: %s %s OP %02X LEN %u %lu\n",
+			WS_GET_FIN(ws->read_buffer[0]) ? "FIN" : "CONT",
+			WS_GET_MASK(ws->read_buffer[1]) ? "MASK" : "CLEAR",
+			WS_GET_OP(ws->read_buffer[0]),
+			WS_GET_LEN(ws->read_buffer[1]),
+			payload_length);
+
+	//handle data
+	switch(WS_GET_OP(ws->read_buffer[0])){
+		case ws_frame_text:
+			fprintf(stderr, "Text payload: %.*s\n", (int) payload_length, (char*) payload);
+		case ws_frame_binary:
+			//TODO forward to peer
+			break;
+		case ws_frame_close:
+			//TODO close connection
+			break;
+		case ws_frame_ping:
+			break;
+		case ws_frame_pong:
+			break;
+		default:
+			//TODO unknown frame type received
+			break;
+	}
+
+	return ((payload - ws->read_buffer) + payload_length);
 }
 
 int ws_data(websocket* ws){
@@ -234,13 +344,16 @@ int ws_data(websocket* ws){
 					n = -1;
 				}
 			}
+			//update read buffer offset
+			ws->read_buffer_offset = bytes_read;
 			break;
 		case ws_open:
-			rv |= ws_frame(ws);
+			ws->read_buffer_offset += bytes_read;
+			for(n = ws_frame(ws); n > 0 && ws->read_buffer_offset > 0; n = ws_frame(ws)){
+				memmove(ws->read_buffer, ws->read_buffer + n, ws->read_buffer_offset - n);
+				ws->read_buffer_offset -= n;
+			}
 	}
-
-	//update read buffer offset
-	ws->read_buffer_offset = bytes_read;
 
 	//disconnect spammy clients
 	if(sizeof(ws->read_buffer) - ws->read_buffer_offset < 2){

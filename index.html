@@ -4,13 +4,20 @@
 			var webSocket = null;
 
 			function openSocket(){
-				webSocket = new WebSocket("ws://localhost:8001/foo/bar");
-				webSocket.onclose = openSocket;
+				setTimeout(function(){
+					webSocket = new WebSocket("ws://localhost:8001/foo/bar");
+					webSocket.onclose = openSocket;
+					webSocket.onmessage = function(event){
+						console.log(event.data);
+					};
+				}, 1000);
 			}
 
 			function init(){
 				openSocket();
-				setInterval(function(){webSocket.send("foo");}, 1000);
+				setInterval(function(){
+					webSocket.send("foo");
+				}, 1000);
 			}
 		</script>
 	</head>

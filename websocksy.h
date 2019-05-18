@@ -11,6 +11,16 @@ typedef enum {
 	ws_open
 } ws_state;
 
+//RFC Section 5.2
+typedef enum {
+	ws_frame_continuation = 0,
+	ws_frame_text = 1,
+	ws_frame_binary = 2,
+	ws_frame_close = 8,
+	ws_frame_ping = 9,
+	ws_frame_pong = 10
+} ws_operation;
+
 struct {
 	char* host;
 	char* port;
