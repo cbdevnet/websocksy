@@ -11,6 +11,9 @@ static websocket* sock = NULL;
 
 int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	size_t p;
+	ws_peer_info empty_peer = {
+		0
+	};
 
 	if(ws->state == ws_open && reason){
 		//TODO send close frame
@@ -51,6 +54,10 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 
 	ws->websocket_version = 0;
 	ws->want_upgrade = 0;
+
+	free(ws->peer.host);
+	free(ws->peer.port);
+	ws->peer = empty_peer;
 
 	return 0;
 }
@@ -117,6 +124,13 @@ int ws_upgrade_http(websocket* ws){
 	if(ws->websocket_version == 13
 			&& ws->socket_key
 			&& ws->want_upgrade == 3){
+
+		//find and connect peer
+		if(connect_peer(ws)){
+			ws_close(ws, ws_close_http, "500 Peer connection failed");
+			return 0;
+		}
+
 		if(network_send_str(ws->ws_fd, "HTTP/1.1 101 Upgrading\r\n")
 				|| network_send_str(ws->ws_fd, "Upgrade: websocket\r\n")
 				|| network_send_str(ws->ws_fd, "Connection: Upgrade\r\n")){
@@ -124,9 +138,9 @@ int ws_upgrade_http(websocket* ws){
 			return 0;
 		}
 
-		//calculate the websocket key which for some reason is defined as
+		//calculate the websocket accept key, which for some reason is defined as
 		//base64(sha1(concat(trim(client-key), "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")))
-		//which requires not one but 2 unnecessarily complex operations
+		//requiring not one but 2 unnecessarily complex operations
 		size_t encode_offset = 0;
 		struct sha1_ctx ws_accept_ctx;
 		struct base64_encode_ctx ws_accept_encode;
@@ -148,8 +162,14 @@ int ws_upgrade_http(websocket* ws){
 			return 0;
 		}
 
-		//TODO Sec-Websocket-Protocol
-		//TODO find/connect peer
+		//acknowledge selected protocol
+		if(ws->peer.protocol < ws->protocols){
+			if(network_send_str(ws->ws_fd, "Sec-WebSocket-Protocol: ")
+						|| network_send_str(ws->ws_fd, ws->protocol[ws->peer.protocol])){
+				ws_close(ws, ws_close_http, NULL);
+				return 0;
+			}
+		}
 
 		ws->state = ws_open;
 		if(network_send_str(ws->ws_fd, "\r\n")){
@@ -158,7 +178,11 @@ int ws_upgrade_http(websocket* ws){
 		}
 		return 0;
 	}
-	//TODO RFC 4.2.2.4: An unsupported version must be answered with HTTP 426
+	//RFC 4.2.2.4: An unsupported version must be answered with HTTP 426
+	if(ws->websocket_version != 13){
+		ws_close(ws, ws_close_http, "426 Unsupported protocol version");
+		return 0;
+	}
 	return 1;
 }
 
@@ -205,7 +229,34 @@ int ws_handle_http(websocket* ws){
 		ws->want_upgrade |= 2;
 	}
 	else if(!strcmp(header, "Sec-WebSocket-Protocol")){
-		//TODO parse websocket protocol offers
+		//parse websocket protocol offers
+		for(value = strtok(value, ","); value; value = strtok(NULL, ",")){
+			//ltrim
+			for(; *value && isspace(*value); value++){
+			}
+
+			//rtrim
+			for(p = strlen(value) - 1; p >= 0 && isspace(value[p]); p--){
+				value[p] = 0;
+			}
+
+			for(p = 0; p < ws->protocols; p++){
+				if(!strcmp(ws->protocol[p], value)){
+					break;
+				}
+			}
+
+			//add new protocol
+			if(p == ws->protocols){
+				ws->protocol = realloc(ws->protocol, (ws->protocols + 1) * sizeof(char*));
+				if(!ws->protocol){
+					fprintf(stderr, "Failed to allocate memory\n");
+					return 1;
+				}
+				ws->protocol[ws->protocols] = strdup(value);
+				ws->protocols++;
+			}
+		}
 	}
 	else if(ws->headers < WS_HEADER_LIMIT){
 		ws->header[ws->headers].tag = strdup(header);
@@ -349,7 +400,7 @@ int ws_data(websocket* ws){
 
 	//terminate new data
 	ws->read_buffer[ws->read_buffer_offset + bytes_read] = 0;
-	
+
 	switch(ws->state){
 		case ws_new:
 		case ws_http:
@@ -384,6 +435,7 @@ int ws_data(websocket* ws){
 				memmove(ws->read_buffer, ws->read_buffer + n, ws->read_buffer_offset - n);
 				ws->read_buffer_offset -= n;
 			}
+			break;
 		//this should never be reached, as ws_close also closes the client fd
 		case ws_closed:
 			fprintf(stderr, "This should not have happened\n");

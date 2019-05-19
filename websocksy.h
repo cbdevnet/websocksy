@@ -125,17 +125,54 @@ typedef struct /*_web_socket*/ {
 } websocket;
 
 /*
- * Peer discovery backend
+ * Peer discovery backend API
  *
- * Used to dynamically select the peer based on parameters supplied by the WebSocket connection.
- * The backend maps WebSocket characteristics (such as the endpoint used, the supported protocols and
- * HTTP client headers) to a TCP/UDP/Unix socket peer endpoint using some form of user-configurable
- * provider (such as databases, files, crystal balls or sheer guesses).
+ * Peer discovery backends are used to dynamically select the peer based on parameters supplied by
+ * the WebSocket connection. The backend maps WebSocket characteristics (such as the endpoint used,
+ * the supported protocols and HTTP client headers) to a TCP/UDP/Unix socket peer endpoint using
+ * some form of possibly user-configurable provider (such as databases, files, crystal balls or
+ * sheer guesses).
  *
+ * Backends are supplied as shared objects exporting the following symbols:
+ * 	* `init`: Optional, initialize any storage or connections required
+ * 	* `configure`: Optional, configure the backend
+ * 	* `query`: Required, find a peer for the given parameters
+ * 	* `cleanup`: Optional, Release any acquired resources prior to shutdown
+ */
+
+/*
+ * Called once for the initialization of backend resources if the backend shared objects exports it as
+ * the `init` symbol.
+ * Returns the WEBSOCKSY_API_VERSION used to compile the backend.
+ */
+typedef uint64_t (*ws_backend_init)();
+/*
+ * Called once for every backend configuration variable if the backend shared object exports it as
+ * the `configure` symbol.
+ * Returns 0 on success, anything else fails configuration.
+ */
+typedef uint64_t (*ws_backend_configure)(char* key, char* value);
+/*
+ * Called when a WebSocket successfully negotiates a connection upgrade and is to be connected with
+ * a peer. Exported as the `query` symbol from the backend shared object.
  * The return value is a structure containing the destination address and transport to be connected to
  * the Web Socket, as well as the indicated subprotocol to use (or none, if set to the provided maximum
  * number of protocols).
  * The fields within the structure should be allocated with `calloc` and will be free'd by websocky
  * after use.
  */
-typedef ws_peer_info (*ws_backend)(char* endpoint, size_t protocols, char** protocol, size_t headers, ws_http_header* header, websocket* ws);
+typedef ws_peer_info (*ws_backend_query)(char* endpoint, size_t protocols, char** protocol, size_t headers, ws_http_header* header, websocket* ws);
+/*
+ * Called once for the release of all backend-internal resources if exported as the `cleanup` symbol.
+ */
+typedef void (*ws_backend_cleanup)();
+
+/*
+ * Composite backend model structure
+ */
+typedef struct /*_ws_backend*/ {
+	ws_backend_init init;
+	ws_backend_configure config;
+	ws_backend_query query;
+	ws_backend_cleanup cleanup;
+} ws_backend;

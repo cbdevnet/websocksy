@@ -2,10 +2,11 @@
 	<head>
 		<script type="text/javascript">
 			var webSocket = null;
+			var payload = "foo";
 
 			function openSocket(){
 				setTimeout(function(){
-					webSocket = new WebSocket("ws://localhost:8001/foo/bar");
+					webSocket = new WebSocket("ws://localhost:8001/foo/bar", ["p1", "p2"]);
 					webSocket.onclose = openSocket;
 					webSocket.onmessage = function(event){
 						console.log(event.data);
@@ -16,7 +17,8 @@
 			function init(){
 				openSocket();
 				setInterval(function(){
-					webSocket.send("foo");
+					webSocket.send(payload);
+					payload += payload;
 				}, 1000);
 			}
 		</script>

@@ -37,7 +37,7 @@ char* xstr_lower(char* in){
 }
 
 #include "network.c"
-#include "ws_proto.c"
+#include "builtins.c"
 
 /*
  * WebSocket interface & peer discovery configuration
@@ -48,8 +48,16 @@ static struct {
 	ws_backend backend;
 } config = {
 	.host = "::",
-	.port = "8001"
+	.port = "8001",
+	.backend.query = backend_defaultpeer_query
 };
+
+int connect_peer(websocket* ws){
+	ws->peer = config.backend.query(ws->request_path, ws->protocols, ws->protocol, ws->headers, ws->header, ws);
+	return 0;
+}
+
+#include "ws_proto.c"
 
 /*
  * Signal handler, attached to SIGINT
