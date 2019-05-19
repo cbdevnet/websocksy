@@ -28,6 +28,11 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	if(ws->peer_fd >= 0){
 		close(ws->peer_fd);
 		ws->peer_fd = -1;
+		//clean up framing data
+		if(ws->peer_framing_data){
+			ws->peer.framing(NULL, 0, 0, NULL, &(ws->peer_framing_data), ws->peer.framing_config);
+			ws->peer_framing_data = NULL;
+		}
 	}
 
 	for(p = 0; p < ws->headers; p++){
@@ -45,6 +50,7 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	ws->protocol = NULL;
 
 	ws->read_buffer_offset = 0;
+	ws->peer_buffer_offset = 0;
 
 	free(ws->request_path);
 	ws->request_path = NULL;
@@ -57,6 +63,7 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 
 	free(ws->peer.host);
 	free(ws->peer.port);
+	free(ws->peer.framing_config);
 	ws->peer = empty_peer;
 
 	return 0;
@@ -365,7 +372,13 @@ size_t ws_frame(websocket* ws){
 		case ws_frame_text:
 			fprintf(stderr, "Text payload: %.*s\n", (int) payload_length, (char*) payload);
 		case ws_frame_binary:
-			//TODO forward to peer
+			//forward to peer
+			if(ws->peer_fd >= 0){
+				fprintf(stderr, "WS -> Peer %lu bytes\n", payload_length);
+				if(network_send(ws->peer_fd, payload, payload_length)){
+					ws_close(ws, ws_close_unexpected, "Failed to forward");
+				}
+			}
 			break;
 		case ws_frame_close:
 			ws_close(ws, ws_close_normal, "Client requested termination");
@@ -375,11 +388,18 @@ size_t ws_frame(websocket* ws){
 		case ws_frame_pong:
 			break;
 		default:
-			//TODO unknown frame type received
+			//unknown frame type received
+			fprintf(stderr, "Unknown WebSocket opcode %02X in frame\n", WS_GET_OP(ws->read_buffer[0]));
+			ws_close(ws, ws_close_proto, "Invalid opcode");
 			break;
 	}
 
 	return ((payload - ws->read_buffer) + payload_length);
+}
+
+int ws_send_frame(websocket* ws, ws_operation opcode, uint8_t* data, size_t len){
+	fprintf(stderr, "Peer -> WS %lu bytes\n", len);
+	return 0;
 }
 
 int ws_data(websocket* ws){

@@ -9,6 +9,8 @@
 
 /* HTTP/WS read buffer size & limit */
 #define WS_MAX_LINE 16384
+/* Peer read buffer size / proxy packet limit */
+#define PEER_BUFFER_SIZE 16384
 /* Maximum number of HTTP headers to accept */
 #define WS_HEADER_LIMIT 10
 
@@ -69,27 +71,45 @@ typedef struct /*_ws_http_header*/ {
  * protocol-dependent, this functionality needs to be user-extendable.
  *
  * We do however provide some default framing functions:
- * 	* binary: Always forward all reads as binary frames
  * 	* auto: Based on the content, forward every read result as binary/text
+ * 	* binary: Always forward all reads as binary frames
  * 	* separator: Separate binary frames on a sequence of bytes
  * 	* newline: Forward text frames separated by newlines (\r\n)
  *
  * The separator function is called once for every succesful read from the peer socket and called
  * again when it indicates a frame boundary but there is still data in the buffer.
+ * The `framing_data` pointer can be used to store protocol-dependent data on a per-connection basis.
+ * If the pointer is nonzero when the connection is terminated, the function will be called with a
+ * NULL `data` pointer as an indication the any allocation within `framing_data` is to be freed.
+ * The return value is the number of bytes to be sent to the peer.
  */
-typedef int64_t (*ws_framing)(void);
+typedef int64_t (*ws_framing)(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, char* config);
+
+/*
+ * Modes of peer connection establishment
+ */
+typedef enum {
+	peer_tcp_client,
+	peer_udp_client,
+	peer_tcp_server,
+	peer_udp_server,
+	peer_fifo_tx,
+	peer_fifo_rx,
+	peer_unix
+} peer_transport;
 
 /*
  * Peer connection model
  */
 typedef struct /*_ws_peer_info*/ {
 	/* Peer protocol data */
-	int transport;
+	peer_transport transport;
 	char* host;
 	char* port;
 
 	/* Framing function for this peer */
 	ws_framing framing;
+	char* framing_config;
 
 	/* WebSocket subprotocol indication index*/
 	size_t protocol;
@@ -122,6 +142,9 @@ typedef struct /*_web_socket*/ {
 	/* Peer data */
 	ws_peer_info peer;
 	int peer_fd;
+	uint8_t peer_buffer[PEER_BUFFER_SIZE];
+	size_t peer_buffer_offset;
+	void* peer_framing_data;
 } websocket;
 
 /*
