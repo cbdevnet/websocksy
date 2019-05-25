@@ -164,8 +164,8 @@ typedef struct /*_web_socket*/ {
  */
 
 /*
- * Called once for the initialization of backend resources if the backend shared objects exports it as
- * the `init` symbol.
+ * Called once for the initialization of backend resources. Exported as the `init` symbol from
+ * the backend shared object.
  * Returns the WEBSOCKSY_API_VERSION used to compile the backend.
  */
 typedef uint64_t (*ws_backend_init)();

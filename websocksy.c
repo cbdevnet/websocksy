@@ -50,7 +50,11 @@ static struct {
 } config = {
 	.host = "::",
 	.port = "8001",
-	.backend.query = backend_defaultpeer_query
+	/* Assign the built-in defaultpeer backend by default */
+	.backend.init = backend_defaultpeer_init,
+	.backend.config = backend_defaultpeer_configure,
+	.backend.query = backend_defaultpeer_query,
+	.backend.cleanup = backend_defaultpeer_cleanup
 };
 
 int connect_peer(websocket* ws){
@@ -185,6 +189,12 @@ int main(int argc, char** argv){
 		exit(usage(argv[0]));
 	}
 
+	//initialize the selected peer discovery backend
+	if(config.backend.init() != WEBSOCKSY_API_VERSION){
+		fprintf(stderr, "The selected backend was built for another API version than the core\n");
+		exit(EXIT_FAILURE);
+	}
+
 	//open listening socket
 	listen_fd = network_socket(config.host, config.port, SOCK_STREAM, 1);
 	if(listen_fd < 0){
@@ -255,6 +265,9 @@ int main(int argc, char** argv){
 	}
 
 	//cleanup
+	if(config.backend.cleanup){
+		config.backend.cleanup();
+	}
 	ws_cleanup();
 	close(listen_fd);
 	return 0;

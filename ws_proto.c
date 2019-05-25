@@ -1,6 +1,8 @@
 #define RFC6455_MAGIC_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+#define WS_FRAME_HEADER_LEN 16
 
-#define WS_GET_FIN(a) ((a & 0x80) >> 7)
+#define WS_FLAG_FIN 0x80
+#define WS_GET_FIN(a) ((a & WS_FLAG_FIN) >> 7)
 #define WS_GET_RESERVED(a) ((a & 0xE0) >> 4)
 #define WS_GET_OP(a) ((a & 0x0F))
 #define WS_GET_MASK(a) ((a & 0x80) >> 7)
@@ -172,7 +174,8 @@ int ws_upgrade_http(websocket* ws){
 		//acknowledge selected protocol
 		if(ws->peer.protocol < ws->protocols){
 			if(network_send_str(ws->ws_fd, "Sec-WebSocket-Protocol: ")
-						|| network_send_str(ws->ws_fd, ws->protocol[ws->peer.protocol])){
+						|| network_send_str(ws->ws_fd, ws->protocol[ws->peer.protocol])
+						|| network_send_str(ws->ws_fd, "\r\n")){
 				ws_close(ws, ws_close_http, NULL);
 				return 0;
 			}
@@ -399,6 +402,33 @@ size_t ws_frame(websocket* ws){
 
 int ws_send_frame(websocket* ws, ws_operation opcode, uint8_t* data, size_t len){
 	fprintf(stderr, "Peer -> WS %lu bytes\n", len);
+	uint8_t frame_header[WS_FRAME_HEADER_LEN];
+	size_t header_bytes = 2;
+	uint16_t* payload_len16 = (uint16_t*) (frame_header + 2);
+	uint64_t* payload_len64 = (uint64_t*) (frame_header + 2);
+
+	//FIXME might want to support segmented transfers here
+	//set up the basic frame header
+	frame_header[0] = WS_FLAG_FIN | opcode;
+	if(len <= 125){
+		frame_header[1] = len;
+	}
+	else if(len <= 0xFFFF){
+		frame_header[1] = 126;
+		*payload_len16 = htobe16(len);
+		header_bytes += 2;
+	}
+	else{
+		frame_header[1] = 127;
+		*payload_len64 = htobe64(len);
+		header_bytes += 8;
+	}
+
+	if(network_send(ws->ws_fd, frame_header, header_bytes)
+			|| network_send(ws->ws_fd, data, len)){
+		return 1;
+	}
+
 	return 0;
 }
 
