@@ -10,6 +10,11 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+#include "websocksy.h"
+#include "builtins.h"
+#include "network.h"
+#include "websocket.h"
+
 /* TODO
  * - TLS
  * - config parsing
@@ -19,16 +24,14 @@
  * - framing function discovery / registry
  */
 
-/*
- * Main loop condition, to be set from signal handler
- */
+/* Main loop condition, to be set from signal handler */
 static volatile sig_atomic_t shutdown_requested = 0;
 
-#include "websocksy.h"
+/* Core client registry */
+static size_t socks = 0;
+static websocket* sock = NULL;
 
-/*
- * Lowercase input string in-place
- */
+/* Lowercase input string in-place */
 char* xstr_lower(char* in){
 	size_t n;
 	for(n = 0; n < strlen(in); n++){
@@ -37,12 +40,7 @@ char* xstr_lower(char* in){
 	return in;
 }
 
-#include "network.c"
-#include "builtins.c"
-
-/*
- * WebSocket interface & peer discovery configuration
- */
+/* Daemon configuration */
 static struct {
 	char* host;
 	char* port;
@@ -57,7 +55,46 @@ static struct {
 	.backend.cleanup = backend_defaultpeer_cleanup
 };
 
-int connect_peer(websocket* ws){
+/* Push a new client to the registry */
+int client_register(websocket* ws){
+	size_t n = 0;
+
+	//try to find a slot to occupy
+	for(n = 0; n < socks; n++){
+		if(sock[n].ws_fd == -1){
+			break;
+		}
+	}
+
+	//none found, need to extend
+	if(n == socks){
+		sock = realloc(sock, (socks + 1) * sizeof(websocket));
+		if(!sock){
+			close(ws->ws_fd);
+			fprintf(stderr, "Failed to allocate memory\n");
+			return 1;
+		}
+		socks++;
+	}
+
+	sock[n] = *ws;
+
+	return 0;
+}
+
+void client_cleanup(){
+	size_t n;
+	for(n = 0; n < socks; n++){ 
+		 ws_close(sock + n, ws_close_shutdown, "Shutting down");
+	}
+
+	free(sock);
+	sock = NULL;
+	socks = 0;
+}
+
+/* Establish peer connection for negotiated websocket */
+int client_connect(websocket* ws){
 	int rv = 1;
 
 	ws->peer = config.backend.query(ws->request_path, ws->protocols, ws->protocol, ws->headers, ws->header, ws);
@@ -71,6 +108,7 @@ int connect_peer(websocket* ws){
 		ws->peer.framing = framing_auto;
 	}
 
+	//TODO connection establishment should be async in the future
 	switch(ws->peer.transport){
 		case peer_tcp_client:
 			ws->peer_fd = network_socket(ws->peer.host, ws->peer.port, SOCK_STREAM, 0);
@@ -100,19 +138,17 @@ int connect_peer(websocket* ws){
 	return rv;
 }
 
-#include "ws_proto.c"
-
 /*
  * Signal handler, attached to SIGINT
  */
-void signal_handler(int signum){
+static void signal_handler(int signum){
 	shutdown_requested = 1;
 }
 
 /*
  * Usage info
  */
-int usage(char* fn){
+static int usage(char* fn){
 	fprintf(stderr, "\nwebsocksy v%s - Proxy between websockets and 'real' sockets\n", WEBSOCKSY_VERSION);
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "\t%s [-p <port>] [-l <listen address>] [-b <targeting backend>]\n", fn);
@@ -124,7 +160,7 @@ int args_parse(int argc, char** argv){
 	return 0;
 }
 
-int ws_peer_data(websocket* ws){
+static int ws_peer_data(websocket* ws){
 	ssize_t bytes_read, bytes_left = sizeof(ws->peer_buffer) - ws->peer_buffer_offset;
 	int64_t bytes_framed;
 	//default to a binary frame
@@ -268,7 +304,7 @@ int main(int argc, char** argv){
 	if(config.backend.cleanup){
 		config.backend.cleanup();
 	}
-	ws_cleanup();
+	client_cleanup();
 	close(listen_fd);
 	return 0;
 }

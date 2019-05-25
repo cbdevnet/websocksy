@@ -1,3 +1,19 @@
+#include "network.h"
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <errno.h>
+#include <string.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
+
+/*
+ * Create a file descriptor connected to a socket peer.
+ * Client sockets will be connected, listening sockets will be bound.
+ * Returns -1 in case of failure, a valid fd otherwise.
+ */
 int network_socket(char* host, char* port, int socktype, int listener){
 	int fd = -1, status, yes = 1, flags;
 	struct addrinfo hints = {
@@ -81,7 +97,12 @@ int network_socket(char* host, char* port, int socktype, int listener){
 	return fd;
 }
 
+/*
+ * Send arbitrary data over multiple writes if necessary.
+ * Returns 0 on success
+ */
 int network_send(int fd, uint8_t* data, size_t length){
+	//TODO probably should introduce send buffering at some point
 	ssize_t total = 0, sent;
 	while(total < length){
 		sent = send(fd, data + total, length - total, 0);
@@ -94,6 +115,10 @@ int network_send(int fd, uint8_t* data, size_t length){
 	return 0;
 }
 
+/*
+ * Send string data over multiple writes if necessary.
+ * Returns 0 on success
+ */
 int network_send_str(int fd, char* data){
 	return network_send(fd, (uint8_t*) data, strlen(data));
 }

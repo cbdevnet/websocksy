@@ -1,3 +1,8 @@
+#include <string.h>
+
+#include "websocksy.h"
+#include "builtins.h"
+
 #define UTF8_BYTE(a) ((a & 0xC0) == 0x80)
 
 /*

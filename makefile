@@ -1,10 +1,13 @@
 CFLAGS=-g -Wall -Wpedantic
 LDLIBS=-lnettle
 
+OBJECTS=builtins.o network.o websocket.o
+
 all: websocksy
 
-websocksy: websocksy.c websocksy.h ws_proto.c builtins.c
-	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@
+websocksy: websocksy.c websocksy.h $(OBJECTS)
+	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@ $(OBJECTS)
 
 clean:
-	rm websocksy
+	$(RM) $(OBJECTS)
+	$(RM) websocksy

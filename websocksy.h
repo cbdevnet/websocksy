@@ -1,3 +1,5 @@
+#ifndef WEBSOCKSY_HEADER_INCLUDED
+#define WEBSOCKSY_HEADER_INCLUDED
 #include <stdint.h>
 #include <stdlib.h>
 #include <nettle/sha1.h>
@@ -199,3 +201,9 @@ typedef struct /*_ws_backend*/ {
 	ws_backend_query query;
 	ws_backend_cleanup cleanup;
 } ws_backend;
+
+/* Internal helper functions */
+char* xstr_lower(char* in);
+int client_register(websocket* ws);
+int client_connect(websocket* ws);
+#endif

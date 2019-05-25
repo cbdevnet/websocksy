@@ -1,3 +1,14 @@
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <ctype.h>
+#include <errno.h>
+
+#include "websocket.h"
+#include "network.h"
+
 #define RFC6455_MAGIC_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define WS_FRAME_HEADER_LEN 16
 
@@ -7,9 +18,6 @@
 #define WS_GET_OP(a) ((a & 0x0F))
 #define WS_GET_MASK(a) ((a & 0x80) >> 7)
 #define WS_GET_LEN(a) ((a & 0x7F))
-
-static size_t socks = 0;
-static websocket* sock = NULL;
 
 int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	size_t p;
@@ -72,37 +80,15 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 }
 
 int ws_accept(int listen_fd){
-	size_t n = 0;
-
 	websocket ws = {
 		.ws_fd = accept(listen_fd, NULL, NULL),
 		.peer_fd = -1
 	};
 
-	//try to find a slot to occupy
-	for(n = 0; n < socks; n++){
-		if(sock[n].ws_fd == -1){
-			break;
-		}
-	}
-
-	//none found, need to extend
-	if(n == socks){
-		sock = realloc(sock, (socks + 1) * sizeof(websocket));
-		if(!sock){
-			close(ws.ws_fd);
-			fprintf(stderr, "Failed to allocate memory\n");
-			return 1;
-		}
-		socks++;
-	}
-
-	sock[n] = ws;
-
-	return 0;
+	return client_register(&ws);
 }
 
-int ws_handle_new(websocket* ws){
+static int ws_handle_new(websocket* ws){
 	size_t u;
 	char* path, *proto;
 
@@ -129,13 +115,13 @@ int ws_handle_new(websocket* ws){
 	return 0;
 }
 
-int ws_upgrade_http(websocket* ws){
+static int ws_upgrade_http(websocket* ws){
 	if(ws->websocket_version == 13
 			&& ws->socket_key
 			&& ws->want_upgrade == 3){
 
 		//find and connect peer
-		if(connect_peer(ws)){
+		if(client_connect(ws)){
 			ws_close(ws, ws_close_http, "500 Peer connection failed");
 			return 0;
 		}
@@ -196,7 +182,7 @@ int ws_upgrade_http(websocket* ws){
 	return 1;
 }
 
-int ws_handle_http(websocket* ws){
+static int ws_handle_http(websocket* ws){
 	char* header, *value;
 	ssize_t p;
 
@@ -275,13 +261,13 @@ int ws_handle_http(websocket* ws){
 	}
 	else{
 		//limit the number of stored headers to prevent abuse
-		ws_close(ws, ws_close_http, "500 Header limit");
+		//ws_close(ws, ws_close_http, "500 Header limit");
 	}
 	return 0;
 }
 
 //returns bytes handled
-size_t ws_frame(websocket* ws){
+static size_t ws_frame(websocket* ws){
 	size_t u;
 	uint64_t payload_length = 0;
 	uint16_t* payload_len16 = (uint16_t*) (ws->read_buffer + 2);
@@ -389,6 +375,9 @@ size_t ws_frame(websocket* ws){
 		case ws_frame_ping:
 			break;
 		case ws_frame_pong:
+			if(ws_send_frame(ws, ws_frame_pong, payload, payload_length)){
+				ws_close(ws, ws_close_unexpected, "Failed to send ping");
+			}
 			break;
 		default:
 			//unknown frame type received
@@ -499,15 +488,4 @@ int ws_data(websocket* ws){
 		return 0;
 	}
 	return rv;
-}
-
-void ws_cleanup(){
-	size_t n;
-	for(n = 0; n < socks; n++){
-		ws_close(sock + n, ws_close_shutdown, "Shutting down");
-	}
-
-	free(sock);
-	sock = NULL;
-	socks = 0;
 }
