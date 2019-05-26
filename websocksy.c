@@ -14,6 +14,7 @@
 #include "builtins.h"
 #include "network.h"
 #include "websocket.h"
+#include "plugin.h"
 
 #define DEFAULT_HOST "::"
 #define DEFAULT_PORT "8001"
@@ -21,6 +22,7 @@
 /* TODO
  * - TLS
  * - framing function discovery / registry
+ * - WS p2p
  */
 
 /* Main loop condition, to be set from signal handler */
@@ -203,7 +205,18 @@ static int args_parse(int argc, char** argv){
 				config.host = argv[u + 1];
 				break;
 			case 'b':
-				//TODO load peer discovery plugin
+				//clean up the previously registered backend
+				if(config.backend.cleanup){
+					config.backend.cleanup();
+				}
+				//load the backend plugin
+				if(plugin_backend_load(argv[u + 1], &(config.backend))){
+					return 1;
+				}
+				if(config.backend.init() != WEBSOCKSY_API_VERSION){
+					fprintf(stderr, "Loaded backend %s was built for a different API version\n", argv[u + 1]);
+					return 1;
+				}
 				break;
 			case 'c':
 				if(!strchr(argv[u + 1], '=')){
@@ -286,15 +299,30 @@ int main(int argc, char** argv){
 	size_t n;
 	int listen_fd = -1, status, max_fd;
 
+	//register default framing functions before parsing arguments, as they may be assigned within a backend configuration
+	if(plugin_register_framing("auto", framing_auto)
+			|| plugin_register_framing("binary", framing_binary)
+			|| plugin_register_framing("separator", framing_separator)
+			|| plugin_register_framing("newline", framing_newline)){
+		fprintf(stderr, "Failed to initialize builtins\n");
+		exit(EXIT_FAILURE);
+	}
+
+	//load plugin framing functions
+	if(plugin_framing_load(PLUGINS)){
+		fprintf(stderr, "Failed to load plugins\n");
+		exit(EXIT_FAILURE);
+	}
+
+	//initialize the default backend
+	if(config.backend.init() != WEBSOCKSY_API_VERSION){
+		fprintf(stderr, "Failed to initialize builtin backend\n");
+		exit(EXIT_FAILURE);
+	}
+
 	//parse command line arguments
 	if(args_parse(argc - 1, argv + 1)){
 		exit(usage(argv[0]));
-	}
-
-	//initialize the selected peer discovery backend
-	if(config.backend.init() != WEBSOCKSY_API_VERSION){
-		fprintf(stderr, "The selected backend was built for another API version than the core\n");
-		exit(EXIT_FAILURE);
 	}
 
 	//open listening socket
@@ -371,6 +399,7 @@ int main(int argc, char** argv){
 		config.backend.cleanup();
 	}
 	client_cleanup();
+	plugin_cleanup();
 	close(listen_fd);
 	return 0;
 }

@@ -2,6 +2,7 @@
 
 #include "websocksy.h"
 #include "builtins.h"
+#include "plugin.h"
 
 #define UTF8_BYTE(a) ((a & 0xC0) == 0x80)
 
@@ -47,6 +48,13 @@ uint64_t backend_defaultpeer_configure(char* key, char* value){
 		free(default_peer_proto);
 		default_peer_proto = strdup(value);
 	}
+	else if(!strcmp(key, "framing")){
+		default_peer.framing = plugin_framing(value);
+	}
+	else if(!strcmp(key, "framing-config")){
+		free(default_peer.framing_config);
+		default_peer.framing_config = strdup(value);
+	}
 	return 1;
 }
 
@@ -61,6 +69,7 @@ ws_peer_info backend_defaultpeer_query(char* endpoint, size_t protocols, char** 
 	ws_peer_info peer = default_peer;
 	peer.host = (default_peer.host) ? strdup(default_peer.host) : NULL;
 	peer.port = (default_peer.port) ? strdup(default_peer.port) : NULL;
+	peer.framing_config = (default_peer.framing_config) ? strdup(default_peer.framing_config) : NULL;
 
 	//if none set, announce none
 	peer.protocol = protocols;
@@ -90,6 +99,8 @@ void backend_defaultpeer_cleanup(){
 	default_peer.host = NULL;
 	free(default_peer.port);
 	default_peer.port = NULL;
+	free(default_peer.framing_config);
+	default_peer.framing_config = NULL;
 	free(default_peer_proto);
 	default_peer_proto = NULL;
 }
@@ -98,7 +109,7 @@ void backend_defaultpeer_cleanup(){
  * The `auto` stream framing function forwards all incoming data from the peer immediately,
  * with the text frame type if the data is valid UTF8 and the binary frame type otherwise.
  */
-int64_t framing_auto(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, char* config){
+int64_t framing_auto(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, const char* config){
 	size_t p;
 	uint8_t valid = 1;
 	for(p = 0; p < length; p++){
@@ -150,16 +161,16 @@ int64_t framing_auto(uint8_t* data, size_t length, size_t last_read, ws_operatio
 /*
  * The `binary` peer stream framing function forwards all incoming data from the peer immediately as binary frames
  */
-int64_t framing_binary(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, char* config){
+int64_t framing_binary(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, const char* config){
 	return length;
 }
 
-int64_t framing_separator(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, char* config){
+int64_t framing_separator(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, const char* config){
 	//TODO implement separator framer
 	return length;
 }
 
-int64_t framing_newline(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, char* config){
+int64_t framing_newline(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, const char* config){
 	//TODO implement separator framer
 	return length;
 }

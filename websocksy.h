@@ -85,7 +85,7 @@ typedef struct /*_ws_http_header*/ {
  * NULL `data` pointer as an indication the any allocation within `framing_data` is to be freed.
  * The return value is the number of bytes to be sent to the peer.
  */
-typedef int64_t (*ws_framing)(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, char* config);
+typedef int64_t (*ws_framing)(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, const char* config);
 
 /* Peer connection modes */
 typedef enum {

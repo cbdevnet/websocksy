@@ -26,7 +26,17 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	};
 
 	if(ws->state == ws_open && reason){
-		//TODO send close frame
+		//send close frame
+		//FIXME this should prepend the status code to the reason
+		ws_send_frame(ws, ws_frame_close, (uint8_t*) reason, strlen(reason));
+	}
+	else if(ws->state == ws_http
+			&& code == ws_close_http
+			&& reason){
+		//send http response
+		network_send_str(ws->ws_fd, "HTTP/1.1 ");
+		network_send_str(ws->ws_fd, reason);
+		network_send_str(ws->ws_fd, "\r\n\r\n");
 	}
 	ws->state = ws_closed;
 
@@ -349,17 +359,17 @@ static size_t ws_frame(websocket* ws){
 	//TODO handle fragmentation
 	//TODO handle control frames within fragmented frames
 
-	fprintf(stderr, "Incoming websocket data: %s %s OP %02X LEN %u %lu\n",
+	/*fprintf(stderr, "Incoming websocket data: %s %s OP %02X LEN %u %lu\n",
 			WS_GET_FIN(ws->read_buffer[0]) ? "FIN" : "CONT",
 			WS_GET_MASK(ws->read_buffer[1]) ? "MASK" : "CLEAR",
 			WS_GET_OP(ws->read_buffer[0]),
 			WS_GET_LEN(ws->read_buffer[1]),
-			payload_length);
+			payload_length);*/
 
 	//handle data
 	switch(WS_GET_OP(ws->read_buffer[0])){
 		case ws_frame_text:
-			fprintf(stderr, "Text payload: %.*s\n", (int) payload_length, (char*) payload);
+			//fprintf(stderr, "Text payload: %.*s\n", (int) payload_length, (char*) payload);
 		case ws_frame_binary:
 			//forward to peer
 			if(ws->peer_fd >= 0){
@@ -373,11 +383,12 @@ static size_t ws_frame(websocket* ws){
 			ws_close(ws, ws_close_normal, "Client requested termination");
 			break;
 		case ws_frame_ping:
+			if(ws_send_frame(ws, ws_frame_pong, payload, payload_length)){
+				ws_close(ws, ws_close_unexpected, "Failed to send pong");
+			}
 			break;
 		case ws_frame_pong:
-			if(ws_send_frame(ws, ws_frame_pong, payload, payload_length)){
-				ws_close(ws, ws_close_unexpected, "Failed to send ping");
-			}
+			//TODO keep-alive pings
 			break;
 		default:
 			//unknown frame type received
@@ -390,7 +401,7 @@ static size_t ws_frame(websocket* ws){
 }
 
 int ws_send_frame(websocket* ws, ws_operation opcode, uint8_t* data, size_t len){
-	fprintf(stderr, "Peer -> WS %lu bytes\n", len);
+	fprintf(stderr, "Peer -> WS %lu bytes (%02X)\n", len, opcode);
 	uint8_t frame_header[WS_FRAME_HEADER_LEN];
 	size_t header_bytes = 2;
 	uint16_t* payload_len16 = (uint16_t*) (frame_header + 2);
