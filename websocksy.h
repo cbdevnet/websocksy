@@ -87,10 +87,9 @@ typedef struct /*_ws_http_header*/ {
  */
 typedef int64_t (*ws_framing)(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, char* config);
 
-/*
- * Modes of peer connection establishment
- */
+/* Peer connection modes */
 typedef enum {
+	peer_transport_detect,
 	peer_tcp_client,
 	peer_udp_client,
 	peer_tcp_server,
@@ -100,9 +99,7 @@ typedef enum {
 	peer_unix
 } peer_transport;
 
-/*
- * Peer connection model
- */
+/* Peer address model */
 typedef struct /*_ws_peer_info*/ {
 	/* Peer protocol data */
 	peer_transport transport;
@@ -117,9 +114,7 @@ typedef struct /*_ws_peer_info*/ {
 	size_t protocol;
 } ws_peer_info;
 
-/*
- * Core connection model
- */
+/* Core connection model */
 typedef struct /*_web_socket*/ {
 	/* WebSocket state & data */
 	int ws_fd;

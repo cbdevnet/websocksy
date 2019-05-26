@@ -15,12 +15,11 @@
 #include "network.h"
 #include "websocket.h"
 
+#define DEFAULT_HOST "::"
+#define DEFAULT_PORT "8001"
+
 /* TODO
  * - TLS
- * - config parsing
- * - backend config
- * - framing config / per peer?
- * - per-connection framing state
  * - framing function discovery / registry
  */
 
@@ -46,8 +45,8 @@ static struct {
 	char* port;
 	ws_backend backend;
 } config = {
-	.host = "::",
-	.port = "8001",
+	.host = DEFAULT_HOST,
+	.port = DEFAULT_PORT,
 	/* Assign the built-in defaultpeer backend by default */
 	.backend.init = backend_defaultpeer_init,
 	.backend.config = backend_defaultpeer_configure,
@@ -93,10 +92,34 @@ void client_cleanup(){
 	socks = 0;
 }
 
+static peer_transport client_detect_transport(char* host){
+	if(!strncmp(host, "tcp://", 6)){
+		memmove(host, host + 6, strlen(host) - 5);
+		return peer_tcp_client;
+	}
+	else if(!strncmp(host, "udp://", 6)){
+		memmove(host, host + 6, strlen(host) - 5);
+		return peer_udp_client;
+	}
+	else if(!strncmp(host, "fifotx://", 9)){
+		memmove(host, host + 9, strlen(host) - 8);
+		return peer_fifo_tx;
+	}
+	else if(!strncmp(host, "fiforx://", 9)){
+		memmove(host, host + 9, strlen(host) - 8);
+		return peer_fifo_rx;
+	}
+	else if(!strncmp(host, "unix://", 8)){
+		memmove(host, host + 8, strlen(host) - 7);
+		return peer_unix;
+	}
+
+	fprintf(stderr, "Peer address %s does not include any known protocol identifier, guessing tcp_client\n", host);
+	return peer_tcp_client;
+}
+
 /* Establish peer connection for negotiated websocket */
 int client_connect(websocket* ws){
-	int rv = 1;
-
 	ws->peer = config.backend.query(ws->request_path, ws->protocols, ws->protocol, ws->headers, ws->header, ws);
 	if(!ws->peer.host || !ws->peer.port){
 		//no peer provided
@@ -106,6 +129,11 @@ int client_connect(websocket* ws){
 	//assign default framing function if none provided
 	if(!ws->peer.framing){
 		ws->peer.framing = framing_auto;
+	}
+
+	//if required scan the hostname for a protocol
+	if(ws->peer.transport == peer_transport_detect){
+		ws->peer.transport = client_detect_transport(ws->peer.host);
 	}
 
 	//TODO connection establishment should be async in the future
@@ -119,44 +147,82 @@ int client_connect(websocket* ws){
 		case peer_tcp_server:
 			//TODO implement tcp server mode
 			fprintf(stderr, "TCP Server mode not yet implemented\n");
-			rv = 1;
-			break;
+			return 1;
 		case peer_udp_server:
 			ws->peer_fd = network_socket(ws->peer.host, ws->peer.port, SOCK_DGRAM, 1);
 			break;
 		case peer_fifo_tx:
 		case peer_fifo_rx:
 		case peer_unix:
-		default:
 			//TODO implement other peer modes
 			fprintf(stderr, "Peer connection mode not yet implemented\n");
-			rv = 1;
-			break;
+			return 1;
+		default:
+			fprintf(stderr, "Invalid peer transport selected\n");
+			return 1;
 	}
 
-	rv = (ws->peer_fd == -1) ? 1 : 0;
-	return rv;
+	return (ws->peer_fd == -1) ? 1 : 0;
 }
 
-/*
- * Signal handler, attached to SIGINT
- */
+/* Signal handler, attached to SIGINT */
 static void signal_handler(int signum){
 	shutdown_requested = 1;
 }
 
-/*
- * Usage info
- */
+/* Usage info */
 static int usage(char* fn){
 	fprintf(stderr, "\nwebsocksy v%s - Proxy between websockets and 'real' sockets\n", WEBSOCKSY_VERSION);
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "\t%s [-p <port>] [-l <listen address>] [-b <targeting backend>]\n", fn);
+	fprintf(stderr, "\t%s [-p <port>] [-l <listen address>] [-b <discovery backend>] [-c <option>=<value>]\n", fn);
+	fprintf(stderr, "Arguments:\n");
+	fprintf(stderr, "\t-p <port>\t\tWebSocket listen port (Current: %s, Default: %s)\n", config.port, DEFAULT_PORT);
+	fprintf(stderr, "\t-l <address>\t\tWebSocket listen address (Current: %s, Default: %s)\n", config.host, DEFAULT_HOST);
+	fprintf(stderr, "\t-b <backend>\t\tPeer discovery backend (Default: built-in 'defaultpeer')\n");
+	fprintf(stderr, "\t-c <option>=<value>\tPass configuration options to the peer discovery backend\n");
 	return EXIT_FAILURE;
 }
 
-int args_parse(int argc, char** argv){
-	//TODO
+static int args_parse(int argc, char** argv){
+	size_t u;
+	char* option = NULL, *value = NULL;
+
+	if(argc % 2){
+		return 1;
+	}
+
+	for(u = 0; u < argc; u += 2){
+		if(argv[u][0] != '-'){
+			return 1;
+		}
+		switch(argv[u][1]){
+			case 'p':
+				config.port = argv[u + 1];
+				break;
+			case 'l':
+				config.host = argv[u + 1];
+				break;
+			case 'b':
+				//TODO load peer discovery plugin
+				break;
+			case 'c':
+				if(!strchr(argv[u + 1], '=')){
+					return 1;
+				}
+				if(!config.backend.config){
+					continue;
+				}
+				option = strdup(argv[u + 1]);
+				value = strchr(option, '=');
+				*value = 0;
+				value++;
+				config.backend.config(option, value);
+				free(option);
+				option = NULL;
+				value = NULL;
+				break;
+		}
+	}
 	return 0;
 }
 

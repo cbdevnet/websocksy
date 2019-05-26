@@ -21,9 +21,9 @@ static char* default_peer_proto = NULL;
  */
 uint64_t backend_defaultpeer_init(){
 	ws_peer_info startup_peer = {
-		.transport = peer_tcp_client,
-		.host = strdup("localhost"),
-		.port = strdup("5900")
+		.transport = peer_transport_detect,
+		.host = (default_peer.host) ? default_peer.host : strdup("tcp://localhost"),
+		.port = (default_peer.port) ? default_peer.port : strdup("5900")
 	};
 
 	default_peer = startup_peer;
@@ -35,9 +35,9 @@ uint64_t backend_defaultpeer_init(){
  */
 uint64_t backend_defaultpeer_configure(char* key, char* value){
 	if(!strcmp(key, "host")){
-		//TODO extract peer protocol
 		free(default_peer.host);
 		default_peer.host = strdup(value);
+		default_peer.transport = peer_transport_detect;
 	}
 	else if(!strcmp(key, "port")){
 		free(default_peer.port);
