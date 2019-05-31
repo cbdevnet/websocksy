@@ -2,6 +2,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netdb.h>
 #include <errno.h>
 #include <string.h>
@@ -10,8 +11,8 @@
 #include <unistd.h>
 
 /*
- * Create a file descriptor connected to a socket peer.
- * Client sockets will be connected, listening sockets will be bound.
+ * Create a file descriptor connected to a network socket peer.
+ * Client sockets will be connected, listening sockets will be bound/listened.
  * Returns -1 in case of failure, a valid fd otherwise.
  */
 int network_socket(char* host, char* port, int socktype, int listener){
@@ -92,6 +93,59 @@ int network_socket(char* host, char* port, int socktype, int listener){
 			close(fd);
 			return -1;
 		}
+	}
+
+	return fd;
+}
+
+/*
+ * Create a file descriptor connected to a unix socket peer.
+ * Client sockets will be connected, listening sockets will be bound.
+ * Returns -1 in case of failure, a valid fd otherwise.
+ */
+int network_socket_unix(char* path, int socktype, int listener){
+	struct sockaddr_un addr = {
+		.sun_family = AF_UNIX,
+	};
+	int fd = socket(AF_UNIX, socktype, 0), flags;
+
+	if(fd < 0){
+		fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
+		return -1;
+	}
+
+	//set nonblocking
+	flags = fcntl(fd, F_GETFL, 0);
+	if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0){
+		fprintf(stderr, "Failed to set socket nonblocking: %s\n", strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	strncpy(addr.sun_path, path, (strlen(path) < (sizeof(addr.sun_path) - 1)) ? strlen(path) : (sizeof(addr.sun_path) - 1));
+
+	if(listener){
+		unlink(path);
+		if(bind(fd, (struct sockaddr*) &addr, sizeof(addr))){
+			fprintf(stderr, "Failed to bind: %s\n", strerror(errno));
+			close(fd);
+			return -1;
+		}
+
+		if(listen(fd, SOMAXCONN)){
+			fprintf(stderr, "Failed to listen: %s\n", strerror(errno));
+			close(fd);
+			return -1;
+		}
+
+		return fd;
+	}
+
+	//connect clients
+	if(connect(fd, (struct sockaddr*) &addr, sizeof(addr))){
+		fprintf(stderr, "Failed to connect: %s\n", strerror(errno));
+		close(fd);
+		return -1;
 	}
 
 	return fd;

@@ -113,7 +113,11 @@ static peer_transport client_detect_transport(char* host){
 	}
 	else if(!strncmp(host, "unix://", 8)){
 		memmove(host, host + 8, strlen(host) - 7);
-		return peer_unix;
+		return peer_unix_stream;
+	}
+	else if(!strncmp(host, "unix-dgram://", 13)){
+		memmove(host, host + 13, strlen(host) - 12);
+		return peer_unix_dgram;
 	}
 
 	fprintf(stderr, "Peer address %s does not include any known protocol identifier, guessing tcp_client\n", host);
@@ -123,7 +127,8 @@ static peer_transport client_detect_transport(char* host){
 /* Establish peer connection for negotiated websocket */
 int client_connect(websocket* ws){
 	ws->peer = config.backend.query(ws->request_path, ws->protocols, ws->protocol, ws->headers, ws->header, ws);
-	if(!ws->peer.host || !ws->peer.port){
+	if(!ws->peer.host){
+		//TODO check port if network socket
 		//no peer provided
 		return 1;
 	}
@@ -146,19 +151,17 @@ int client_connect(websocket* ws){
 		case peer_udp_client:
 			ws->peer_fd = network_socket(ws->peer.host, ws->peer.port, SOCK_DGRAM, 0);
 			break;
-		case peer_tcp_server:
-			//TODO implement tcp server mode
-			fprintf(stderr, "TCP Server mode not yet implemented\n");
-			return 1;
-		case peer_udp_server:
-			ws->peer_fd = network_socket(ws->peer.host, ws->peer.port, SOCK_DGRAM, 1);
-			break;
 		case peer_fifo_tx:
 		case peer_fifo_rx:
-		case peer_unix:
 			//TODO implement other peer modes
 			fprintf(stderr, "Peer connection mode not yet implemented\n");
 			return 1;
+		case peer_unix_stream:
+			ws->peer_fd = network_socket_unix(ws->peer.host, SOCK_STREAM, 0);
+			break;
+		case peer_unix_dgram:
+			ws->peer_fd = network_socket_unix(ws->peer.host, SOCK_DGRAM, 0);
+			break;
 		default:
 			fprintf(stderr, "Invalid peer transport selected\n");
 			return 1;

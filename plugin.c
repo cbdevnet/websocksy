@@ -10,12 +10,12 @@ static char** framing_function_name = NULL;
 
 int plugin_framing_load(char* path){
 	//TODO load plugins
-	return 1;
+	return 0;
 }
 
 int plugin_backend_load(char* backend_requested, ws_backend* backend){
 	//TODO load backend
-	return 1;
+	return 0;
 }
 
 int plugin_register_framing(char* name, ws_framing func){

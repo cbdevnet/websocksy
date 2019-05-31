@@ -92,11 +92,10 @@ typedef enum {
 	peer_transport_detect,
 	peer_tcp_client,
 	peer_udp_client,
-	peer_tcp_server,
-	peer_udp_server,
 	peer_fifo_tx,
 	peer_fifo_rx,
-	peer_unix
+	peer_unix_stream,
+	peer_unix_dgram
 } peer_transport;
 
 /* Peer address model */
