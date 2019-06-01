@@ -153,7 +153,7 @@ typedef struct /*_web_socket*/ {
  * sheer guesses).
  *
  * Backends are supplied as shared objects exporting the following symbols:
- * 	* `init`: Optional, initialize any storage or connections required
+ * 	* `init`: Required, initialize any storage or connections required
  * 	* `configure`: Optional, configure the backend
  * 	* `query`: Required, find a peer for the given parameters
  * 	* `cleanup`: Optional, Release any acquired resources prior to shutdown

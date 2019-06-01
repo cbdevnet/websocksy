@@ -21,7 +21,8 @@
 
 /* TODO
  * - TLS
- * - framing function discovery / registry
+ * - plugin loading
+ * - config file
  * - WS p2p
  */
 
@@ -111,8 +112,8 @@ static peer_transport client_detect_transport(char* host){
 		memmove(host, host + 9, strlen(host) - 8);
 		return peer_fifo_rx;
 	}
-	else if(!strncmp(host, "unix://", 8)){
-		memmove(host, host + 8, strlen(host) - 7);
+	else if(!strncmp(host, "unix://", 7)){
+		memmove(host, host + 7, strlen(host) - 6);
 		return peer_unix_stream;
 	}
 	else if(!strncmp(host, "unix-dgram://", 13)){
@@ -213,7 +214,7 @@ static int args_parse(int argc, char** argv){
 					config.backend.cleanup();
 				}
 				//load the backend plugin
-				if(plugin_backend_load(argv[u + 1], &(config.backend))){
+				if(plugin_backend_load(PLUGINS, argv[u + 1], &(config.backend))){
 					return 1;
 				}
 				if(config.backend.init() != WEBSOCKSY_API_VERSION){

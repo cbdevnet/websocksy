@@ -66,8 +66,9 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	for(p = 0; p < ws->protocols; p++){
 		free(ws->protocol[p]);
 	}
-	ws->protocols = 0;
+	free(ws->protocol);
 	ws->protocol = NULL;
+	ws->protocols = 0;
 
 	ws->read_buffer_offset = 0;
 	ws->peer_buffer_offset = 0;

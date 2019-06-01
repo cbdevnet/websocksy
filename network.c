@@ -127,13 +127,13 @@ int network_socket_unix(char* path, int socktype, int listener){
 	if(listener){
 		unlink(path);
 		if(bind(fd, (struct sockaddr*) &addr, sizeof(addr))){
-			fprintf(stderr, "Failed to bind: %s\n", strerror(errno));
+			fprintf(stderr, "Failed to bind %s: %s\n", path, strerror(errno));
 			close(fd);
 			return -1;
 		}
 
 		if(listen(fd, SOMAXCONN)){
-			fprintf(stderr, "Failed to listen: %s\n", strerror(errno));
+			fprintf(stderr, "Failed to listen on %s: %s\n", path, strerror(errno));
 			close(fd);
 			return -1;
 		}
@@ -143,7 +143,7 @@ int network_socket_unix(char* path, int socktype, int listener){
 
 	//connect clients
 	if(connect(fd, (struct sockaddr*) &addr, sizeof(addr))){
-		fprintf(stderr, "Failed to connect: %s\n", strerror(errno));
+		fprintf(stderr, "Failed to connect to %s: %s\n", path, strerror(errno));
 		close(fd);
 		return -1;
 	}
