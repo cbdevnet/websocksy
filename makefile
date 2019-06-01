@@ -1,3 +1,4 @@
+.PHONY: all clean plugins
 PLUGINPATH=plugins/
 
 CFLAGS=-g -Wall -Wpedantic -DPLUGINS=\"$(PLUGINPATH)\"
@@ -7,7 +8,10 @@ OBJECTS=builtins.o network.o websocket.o plugin.o
 
 all: websocksy
 
-websocksy: websocksy.c websocksy.h $(OBJECTS)
+plugins:
+	$(MAKE) -C plugins
+
+websocksy: websocksy.c websocksy.h $(OBJECTS) plugins
 	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@ $(OBJECTS)
 
 clean:

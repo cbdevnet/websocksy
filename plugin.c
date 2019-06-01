@@ -43,19 +43,11 @@ int plugin_framing_load(char* path){
 	DIR* directory = opendir(path);
 	struct dirent* file = NULL;
 	char plugin_path[MAX_PLUGIN_PATH] = "";
-	size_t path_len;
 
-	if(strlen(path) >= sizeof(plugin_path) - 20){
+	if(strlen(path) >= sizeof(plugin_path) - 20 || strlen(path) == 0){
 		fprintf(stderr, "Plugin path length exceeds limit\n");
 		return 1;
 	}
-
-	strncpy(plugin_path, path, sizeof(plugin_path) - 2);
-	if(path[strlen(path) - 1] != '/'){
-		plugin_path[strlen(path)] = '/';
-		plugin_path[strlen(path) + 1] = 0;
-	}
-	path_len = strlen(plugin_path);
 
 	if(!directory){
 		fprintf(stderr, "Failed to open directory %s: %s\n", path, strerror(errno));
@@ -71,7 +63,8 @@ int plugin_framing_load(char* path){
 		if(strlen(file->d_name) < 4 || strcmp(file->d_name + strlen(file->d_name) - 3, ".so")){
 			continue;
 		}
-		strncpy(plugin_path + path_len, file->d_name, sizeof(plugin_path) - path_len - 2);
+
+		snprintf(plugin_path, sizeof(plugin_path), "%s%s%s", path, (path[strlen(path) - 1] == '/') ? "" : "/", file->d_name);
 		if(!plugin_attach(plugin_path)){
 			return 1;
 		}
@@ -85,7 +78,7 @@ int plugin_backend_load(char* path, char* backend_requested, ws_backend* backend
 	char plugin_path[MAX_PLUGIN_PATH] = "";
 	void* handle = NULL;
 
-	if(strlen(path) >= sizeof(plugin_path) - 30){
+	if(strlen(path) >= sizeof(plugin_path) - 30 || strlen(path) == 0){
 		fprintf(stderr, "Plugin path length exceeds limit\n");
 		return 1;
 	}

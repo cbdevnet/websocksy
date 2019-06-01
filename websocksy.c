@@ -130,6 +130,7 @@ int client_connect(websocket* ws){
 	ws->peer = config.backend.query(ws->request_path, ws->protocols, ws->protocol, ws->headers, ws->header, ws);
 	if(!ws->peer.host){
 		//TODO check port if network socket
+		//TODO try to extract port from host if none given
 		//no peer provided
 		return 1;
 	}
