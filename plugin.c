@@ -19,7 +19,7 @@ static size_t attached_libraries = 0;
 static void** attached_library = NULL;
 
 static void* plugin_attach(char* path){
-	void* module = dlopen(path, RTLD_LAZY);
+	void* module = dlopen(path, RTLD_NOW);
 
 	if(!module){
 		fprintf(stderr, "Failed to load module %s\n", dlerror());

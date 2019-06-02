@@ -1,7 +1,7 @@
 .PHONY: all clean
 PLUGINS = backend_file.so
 
-CFLAGS += -fPIC -I../
+CFLAGS += -fPIC -g -I../
 LDFLAGS += -shared
 
 %.so :: %.c %.h

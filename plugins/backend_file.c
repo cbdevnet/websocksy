@@ -84,7 +84,11 @@ static int expression_resolve(char* template, size_t length, char* endpoint, siz
 					return 1;
 				}
 
-				//TODO rtrim slash
+				//rtrim slash so test and test/ are the same file
+				if(strlen(endpoint) >= 2 && endpoint[strlen(endpoint) - 1] == '/'){
+					endpoint[strlen(endpoint) - 1] = 0;
+				}
+
 				//replace with sanitized endpoint string
 				for(p = 0; endpoint[p]; p++){
 					if(endpoint[p] == '/'){
@@ -106,7 +110,45 @@ static int expression_resolve(char* template, size_t length, char* endpoint, siz
 					return 1;
 				}
 
-				//TODO iterate cookies
+				//find the cookie header
+				for(p = 0; p < headers; p++){
+					if(!strcmp(header[p].tag, "Cookie")){
+						value = header[p].value;
+						break;
+					}
+				}
+
+				//no cookie header, fail the expression
+				if(p == headers){
+					return 1;
+				}
+
+				do{
+					//ensure min length of cookie name
+					if(strlen(value) < index_len + 1){
+						return 1;
+					}
+					//check if cookie found
+					if(value[index_len] == '='
+							&& !strncmp(value, index, index_len)){
+						value += index_len + 1;
+						for(value_len = 0; value[value_len] && value[value_len] != ';'; value_len++){
+						}
+						break;
+					}
+					//skip to next cookie
+					for(; *value && strncmp(value, "; ", 2); value++){
+					}
+					if(*value){
+						value += 2;
+					}
+				} while(*value);
+
+				if(!*value){
+					return 1;
+				}
+
+				variable_len = 8 + index_len + 1;
 			}
 			else if(!strncmp(template + u, "%header:", 8)){
 				//scan headers
@@ -140,9 +182,10 @@ static int expression_resolve(char* template, size_t length, char* endpoint, siz
 				fprintf(stderr, "Expression replacement failed\n");
 				return 1;
 			}
-
-			//skip the inserted value
-			u += value_len - 1;
+			if(value){
+				//skip the inserted value
+				u += value_len - 1;
+			}
 		}
 	}
 
@@ -150,13 +193,14 @@ static int expression_resolve(char* template, size_t length, char* endpoint, siz
 }
 
 ws_peer_info query(char* endpoint, size_t protocols, char** protocol, size_t headers, ws_http_header* header, websocket* ws){
-	size_t u, line_alloc = 0;
+	size_t u, p, line_alloc = 0;
 	ssize_t line_length = 0;
-	char* line = NULL;
+	char* line = NULL, *components[3];
 	FILE* input = NULL;
 	char target_path[BACKEND_FILE_MAX_PATH];
 	ws_peer_info peer = {
 		.transport = peer_transport_detect,
+		.protocol = protocols
 	};
 
 	for(u = 0; u < expressions; u++){
@@ -165,7 +209,7 @@ ws_peer_info query(char* endpoint, size_t protocols, char** protocol, size_t hea
 		if(expression_resolve(target_path + strlen(backend_path) + 1, sizeof(target_path) - strlen(backend_path) - 1, endpoint, headers, header)){
 			continue;
 		}
-	
+
 		//check whether the file exists
 		input = fopen(target_path, "r");
 		if(!input){
@@ -174,8 +218,55 @@ ws_peer_info query(char* endpoint, size_t protocols, char** protocol, size_t hea
 
 		//read it
 		for(line_length = getline(&line, &line_alloc, input); line_length >= 0; line_length = getline(&line, &line_alloc, input)){
-			//TODO evaluate line in file
-			fprintf(stderr, "File %s, line %s\n", target_path, line);
+			memset(components, 0, sizeof(components));
+			//TODO rtrim line
+
+			//read lines of host subproto framing framing-config
+			components[0] = strchr(line, ' ');
+			if(protocols && !components[0]){
+				continue;
+			}
+
+			//terminate host
+			components[0][0] = 0;
+			components[0]++;
+
+			//find framing, terminate subprotocol
+			components[1] = strchr(components[0], ' ');
+			if(components[1]){
+				components[1][0] = 0;
+				components[1]++;
+
+				//find find framing config, terminate framing
+				components[2] = strchr(components[1], ' ');
+				if(components[2]){
+					components[2][0] = 0;
+					components[2]++;
+				}
+			}
+
+			//find a match for any indicated protocol
+			for(p = 0; p < protocols; p++){
+				if(!strcmp(components[0], protocol[p])){
+					peer.protocol = p;
+					break;
+				}
+			}
+
+			//for '*' use the first available protocol
+			if(components[0] && !strcmp(components[0], "*")){
+				peer.protocol = 0;
+			}
+
+			//the current line does not match any indicated protocols
+			if(protocols && peer.protocol == protocols){
+				continue;
+			}
+
+			peer.host = strdup(line);
+			peer.framing = core_framing(components[1]);
+			peer.framing_config = components[2] ? strdup(components[2]) : NULL;
+			break;
 		}
 		fclose(input);
 

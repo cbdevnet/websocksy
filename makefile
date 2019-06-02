@@ -1,5 +1,5 @@
 .PHONY: all clean plugins
-PLUGINPATH=plugins/
+PLUGINPATH?=plugins/
 
 CFLAGS=-g -Wall -Wpedantic -DPLUGINS=\"$(PLUGINPATH)\"
 LDLIBS=-lnettle -ldl
@@ -11,8 +11,9 @@ all: websocksy
 plugins:
 	$(MAKE) -C plugins
 
+websocksy: LDFLAGS += -Wl,-export-dynamic
 websocksy: websocksy.c websocksy.h $(OBJECTS) plugins
-	$(CC) $(CFLAGS) $(LDLIBS) $< -o $@ $(OBJECTS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $< -o $@ $(OBJECTS)
 
 clean:
 	$(RM) $(OBJECTS)

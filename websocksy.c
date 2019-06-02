@@ -125,12 +125,23 @@ static peer_transport client_detect_transport(char* host){
 	return peer_tcp_client;
 }
 
+static char* client_detect_port(char* host){
+	size_t u;
+
+	for(u = 0; host[u]; u++){
+		if(host[u] == ':'){
+			host[u] = 0;
+			return strdup(host + u + 1);
+		}
+	}
+
+	return NULL;
+}
+
 /* Establish peer connection for negotiated websocket */
 int client_connect(websocket* ws){
 	ws->peer = config.backend.query(ws->request_path, ws->protocols, ws->protocol, ws->headers, ws->header, ws);
 	if(!ws->peer.host){
-		//TODO check port if network socket
-		//TODO try to extract port from host if none given
 		//no peer provided
 		return 1;
 	}
@@ -143,6 +154,15 @@ int client_connect(websocket* ws){
 	//if required scan the hostname for a protocol
 	if(ws->peer.transport == peer_transport_detect){
 		ws->peer.transport = client_detect_transport(ws->peer.host);
+	}
+
+	if((ws->peer.transport == peer_tcp_client || ws->peer.transport == peer_udp_client)
+		       && !ws->peer.port){
+		ws->peer.port = client_detect_port(ws->peer.host);
+		if(!ws->peer.port){
+			//no port provided
+			return 1;
+		}
 	}
 
 	//TODO connection establishment should be async in the future
@@ -170,6 +190,10 @@ int client_connect(websocket* ws){
 	}
 
 	return (ws->peer_fd == -1) ? 1 : 0;
+}
+
+ws_framing core_framing(char* name){
+	return plugin_framing(name);
 }
 
 /* Signal handler, attached to SIGINT */

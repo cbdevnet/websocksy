@@ -6,7 +6,7 @@
 
 			function openSocket(){
 				setTimeout(function(){
-					webSocket = new WebSocket("ws://localhost:8001/foo/bar", ["p1", "p2"]);
+					webSocket = new WebSocket("ws://localhost:8001/test", ["p1", "p2"]);
 					webSocket.onclose = openSocket;
 					webSocket.onmessage = function(event){
 						console.log(event.data);

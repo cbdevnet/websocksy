@@ -196,6 +196,9 @@ typedef struct /*_ws_backend*/ {
 	ws_backend_cleanup cleanup;
 } ws_backend;
 
+/* Core API */
+ws_framing core_framing(char* name);
+
 /* Internal helper functions */
 char* xstr_lower(char* in);
 int client_register(websocket* ws);
