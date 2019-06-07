@@ -55,9 +55,11 @@ uint64_t configure(char* key, char* value){
 }
 
 static int expression_replace(char* buffer, size_t buffer_length, size_t variable_length, char* content, size_t content_length){
+	size_t u;
+
 	//check whether the replacement fits
 	if(variable_length < content_length && strlen(buffer) + (content_length - variable_length) >= buffer_length){
-		fprintf(stderr, "Expression replacement buffer overrun\n");
+		fprintf(stderr, "Expression replacement buffer overrun: replacing %lu bytes with %lu bytes, current buffer used %lu, max %lu\n", variable_length, content_length, strlen(buffer), buffer_length);
 		return 1;
 	}
 
@@ -66,7 +68,13 @@ static int expression_replace(char* buffer, size_t buffer_length, size_t variabl
 
 	//insert replacement
 	memcpy(buffer, content, content_length);
-	
+
+	//sanitize replacement
+	for(u = 0; u < content_length; u++){
+		if(buffer[u] == '/'){
+			buffer[u] = '_';
+		}
+	}
 	return 0;
 }
 
@@ -89,15 +97,8 @@ static int expression_resolve(char* template, size_t length, char* endpoint, siz
 					endpoint[strlen(endpoint) - 1] = 0;
 				}
 
-				//replace with sanitized endpoint string
-				for(p = 0; endpoint[p]; p++){
-					if(endpoint[p] == '/'){
-						endpoint[p] = '_';
-					}
-				}
-
 				value = endpoint + 1;
-				value_len = p - 1;
+				value_len = strlen(value);
 				variable_len = 10;
 			}
 			else if(!strncmp(template + u, "%cookie:", 8)){
@@ -263,6 +264,7 @@ ws_peer_info query(char* endpoint, size_t protocols, char** protocol, size_t hea
 				continue;
 			}
 
+			//copy data to peer info structure
 			peer.host = strdup(line);
 			peer.framing = core_framing(components[1]);
 			peer.framing_config = components[2] ? strdup(components[2]) : NULL;

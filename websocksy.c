@@ -15,15 +15,15 @@
 #include "network.h"
 #include "websocket.h"
 #include "plugin.h"
+#include "config.h"
 
 #define DEFAULT_HOST "::"
 #define DEFAULT_PORT "8001"
 
 /* TODO
  * - TLS
- * - plugin loading
  * - config file
- * - WS p2p
+ * - pings
  */
 
 /* Main loop condition, to be set from signal handler */
@@ -43,11 +43,7 @@ char* xstr_lower(char* in){
 }
 
 /* Daemon configuration */
-static struct {
-	char* host;
-	char* port;
-	ws_backend backend;
-} config = {
+static ws_config config = {
 	.host = DEFAULT_HOST,
 	.port = DEFAULT_PORT,
 	/* Assign the built-in defaultpeer backend by default */
@@ -214,60 +210,6 @@ static int usage(char* fn){
 	return EXIT_FAILURE;
 }
 
-static int args_parse(int argc, char** argv){
-	size_t u;
-	char* option = NULL, *value = NULL;
-
-	if(argc % 2){
-		return 1;
-	}
-
-	for(u = 0; u < argc; u += 2){
-		if(argv[u][0] != '-'){
-			return 1;
-		}
-		switch(argv[u][1]){
-			case 'p':
-				config.port = argv[u + 1];
-				break;
-			case 'l':
-				config.host = argv[u + 1];
-				break;
-			case 'b':
-				//clean up the previously registered backend
-				if(config.backend.cleanup){
-					config.backend.cleanup();
-				}
-				//load the backend plugin
-				if(plugin_backend_load(PLUGINS, argv[u + 1], &(config.backend))){
-					return 1;
-				}
-				if(config.backend.init() != WEBSOCKSY_API_VERSION){
-					fprintf(stderr, "Loaded backend %s was built for a different API version\n", argv[u + 1]);
-					return 1;
-				}
-				break;
-			case 'c':
-				if(!strchr(argv[u + 1], '=')){
-					return 1;
-				}
-				if(!config.backend.config){
-					continue;
-				}
-				option = strdup(argv[u + 1]);
-				value = strchr(option, '=');
-				*value = 0;
-				value++;
-				config.backend.config(option, value);
-				free(option);
-				option = NULL;
-				value = NULL;
-				break;
-		}
-	}
-	return 0;
-}
-
 static int ws_peer_data(websocket* ws){
 	ssize_t bytes_read, bytes_left = sizeof(ws->peer_buffer) - ws->peer_buffer_offset;
 	int64_t bytes_framed;
@@ -350,7 +292,7 @@ int main(int argc, char** argv){
 	}
 
 	//parse command line arguments
-	if(args_parse(argc - 1, argv + 1)){
+	if(config_parse_arguments(&config, argc - 1, argv + 1)){
 		exit(usage(argv[0]));
 	}
 
@@ -362,6 +304,8 @@ int main(int argc, char** argv){
 
 	//attach signal handler to catch Ctrl-C
 	signal(SIGINT, signal_handler);
+	//ignore broken pipes when writing
+	signal(SIGPIPE, SIG_IGN);
 
 	//core loop
 	while(!shutdown_requested){

@@ -4,7 +4,7 @@ PLUGINPATH?=plugins/
 CFLAGS=-g -Wall -Wpedantic -DPLUGINS=\"$(PLUGINPATH)\"
 LDLIBS=-lnettle -ldl
 
-OBJECTS=builtins.o network.o websocket.o plugin.o
+OBJECTS=builtins.o network.o websocket.o plugin.o config.o
 
 all: websocksy
 
