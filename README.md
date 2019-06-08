@@ -100,7 +100,7 @@ In the `[core]` section, the following options are recognized:
 In the `[backend]` section, all options are passed directly to the backend and thus are dependent on the specific
 implementation. Backends should provide their own documentation files.
 
-An [example configuration file](websocksy.cfg) using the `file` backend is available in the repository.
+An [example configuration file](plugins/backend_file.cfg) using the `file` backend is available in the repository.
 
 ## Default backend
 
