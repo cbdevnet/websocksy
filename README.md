@@ -74,14 +74,27 @@ The listen port may either be exposed to incoming WebSocket clients directly or 
 
 ### Command line arguments
 
-* `-p <port>`: Set the listen port for incoming WebSocket connections
-* `-l <host>`: Set the host for listening for incoming WebSocket connections
+* `-p <port>`: Set the listen port for incoming WebSocket connections (Default: `8001`)
+* `-l <host>`: Set the host for listening for incoming WebSocket connections (Default: `::`)
 * `-b <backend>`: Select external backend
 * `-c <option>=<value>`: Pass configuration option to backend
 
 ### Configuration file
 
-TBD
+If only one option is passed to `websocksy`, it is interpreted as the path to a configuration file to be read.
+A configuration file should consist of one `[core]` section, configuring central options and an optional `[backend]`
+section, configuring the current backend. Options are set as lines of `<option> = <value>` pairs.
+
+In the `[core]` section, the following options are recognized:
+
+* `port`: Listen port for incoming WebSocket connections
+* `listen`: Host for incoming WebSocket connections
+* `backend`: External backend selection
+
+In the `[backend]` section, all options are passed directly to the backend and thus are dependent on the specific
+implementation. Backends should provide their own documentation files.
+
+An [example configuration file](websocksy.cfg) using the `file` backend is available in the repository.
 
 ## Default backend
 

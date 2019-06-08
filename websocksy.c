@@ -22,7 +22,6 @@
 
 /* TODO
  * - TLS
- * - config file
  * - pings
  */
 
@@ -44,8 +43,8 @@ char* xstr_lower(char* in){
 
 /* Daemon configuration */
 static ws_config config = {
-	.host = DEFAULT_HOST,
-	.port = DEFAULT_PORT,
+	.host = NULL,
+	.port = NULL,
 	/* Assign the built-in defaultpeer backend by default */
 	.backend.init = backend_defaultpeer_init,
 	.backend.config = backend_defaultpeer_configure,
@@ -80,6 +79,7 @@ int client_register(websocket* ws){
 	return 0;
 }
 
+/* Clean up and close all connections */
 void client_cleanup(){
 	size_t n;
 	for(n = 0; n < socks; n++){ 
@@ -201,6 +201,7 @@ static void signal_handler(int signum){
 static int usage(char* fn){
 	fprintf(stderr, "\nwebsocksy v%s - Proxy between websockets and 'real' sockets\n", WEBSOCKSY_VERSION);
 	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "\t%s <configuration file>\n", fn);
 	fprintf(stderr, "\t%s [-p <port>] [-l <listen address>] [-b <discovery backend>] [-c <option>=<value>]\n", fn);
 	fprintf(stderr, "Arguments:\n");
 	fprintf(stderr, "\t-p <port>\t\tWebSocket listen port (Current: %s, Default: %s)\n", config.port, DEFAULT_PORT);
@@ -297,7 +298,7 @@ int main(int argc, char** argv){
 	}
 
 	//open listening socket
-	listen_fd = network_socket(config.host, config.port, SOCK_STREAM, 1);
+	listen_fd = network_socket(config.host ? config.host : DEFAULT_HOST, config.port ? config.port : DEFAULT_PORT, SOCK_STREAM, 1);
 	if(listen_fd < 0){
 		exit(usage(argv[0]));
 	}
