@@ -1,7 +1,9 @@
 # websocksy
 
-`websocksy` is a highly configurable [WebSocket (RFC6455)](https://tools.ietf.org/html/rfc6455) to 'normal' networking transport (TCP/UDP) bridge.
+`websocksy` is a highly configurable [WebSocket (RFC6455)](https://tools.ietf.org/html/rfc6455) to 'normal' networking transport (TCP/UDP/Unix sockets) bridge.
 It is written in C and supports pluggable modules for bridge peer selection modules (for dynamic bridging) and stream framing.
+
+It can be used to connect a wide variety of existing applications directly to a website, or to implement new functionality in a way that maintains compatibility between traditional network transports and WebSockets.
 
 Connecting WebSockets to 'real' sockets may seem like an easy task at first, but the WebSocket protocol has some fundamental differences to TCP and UDP.
 
