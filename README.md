@@ -72,6 +72,10 @@ framing functions (both built in and loaded from plugins).
 
 The listen port may either be exposed to incoming WebSocket clients directly or via a proxying webserver such as nginx.
 
+Exactly one backend can be active at run time. Specifying the backend parameter a second time will unload the first backend
+and load the requested one, losing all configuration. Options will be applied in the order specified to the backend loaded
+at the time.
+
 ### Command line arguments
 
 * `-p <port>`: Set the listen port for incoming WebSocket connections (Default: `8001`)
@@ -118,5 +122,32 @@ To build `websocksy`, you need the following things
 Run `make` in the project directory to build the core binary as well as the default plugins.
 
 # Development
+
+`websocksy` provides two major extension interfaces, which can be attached to by providing custom shared objects.
+The core is written in C and designed to use as few external dependencies as possible.
+
+All types and structures are defined in [`websocksy.h`](websocksy.h), along with their in-depth documentation.
+
+The current API version is `1`. It is available via the compile-time define `WEBSOCKSY_API_VERSION`.
+
+## Peer discovery backend API
+
+When requested to load a backend, `websocksy` tries to load `backend_<name>.so` from the plugin path, which is a
+compile time variable (overridable by providing the environment variable `PLUGINPATH` to `make`), which by default
+points to the `plugins/` directory.
+
+From the backend shared object, `websocksy` tries to resolve the following symbols:
+
+* `init` (`uint64t init()`): Initialize the backend for operation. Called directly after loading the shared object.
+	Must return the `WEBSOCKSY_API_VERSION` the module was built with.
+* `configure` (`uint64_t configure(char* key, char* value)`): Set backend-specific configuration options.
+	Backends should ship their own documentation on which configuration options they provide.
+* `query` (`ws_peer_info query(char* endpoint, size_t protocols, char** protocol, size_t headers, ws_http_header* header, websocket* ws)`):
+	The core function of a backend. Called once for each incoming WebSocket connection to provide a remote peer
+	to be bridged. The fields in the returned structure should be allocated using `calloc` or `malloc` and
+	will be `free`'d by the core.
+* `cleanup` (`void cleanup()`): Release all allocated memory. Called in preparation to core shutdown.
+
+## Peer stream framing API
 
 TBD
