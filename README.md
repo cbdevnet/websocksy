@@ -5,6 +5,23 @@ It is written in C and supports pluggable modules for bridge peer selection modu
 
 It can be used to connect a wide variety of existing applications directly to a website, or to implement new functionality in a way that maintains compatibility between traditional network transports and WebSockets.
 
+## Table of contents
+
+* [Motivation](#motivation)
+* [Dynamic proxying](#dynamic-proxying)
+	* [Peer discovery backends](#peer-discovery-backends)
+	* [Peer stream framing](#peer-stream-framing)
+* [Configuration / Usage](#configuration--usage)
+	* [Command line arguments](#command-line-arguments)
+	* [Configuration file](#configuration-file)
+	* [Default backend](#default-backend)
+* [Building](#building)
+* [Development](#development)
+	* [Peer discovery backend API](#peer-discovery-backend-api)
+	* [Peer stream framing API](#peer-stream-framing-api)
+
+## Motivation
+
 Connecting WebSockets to 'real' sockets may seem like an easy task at first, but the WebSocket protocol has some fundamental differences to TCP and UDP.
 
 ### Framing
@@ -37,7 +54,7 @@ being the primary discriminator between services.
 
 To allow `websocksy` to connect any protocol to a WebSocket endpoint despite these differences, there are two avenues of extensibility.
 
-### Peer discovery backend
+### Peer discovery backends
 
 Peer discovery backends map the metadata from a WebSocket connection, such as HTTP headers (e.g. Cookies), the connection endpoint and any indicated
 subprotocols to a peer address naming a 'normal' socket.
@@ -67,8 +84,11 @@ framing functions (both built in and loaded from plugins).
 
 * `auto`: Send all data immediately, with the `text` type if the content was detected as valid UTF-8 string, otherwise use a `binary` frame
 * `binary`: Send all data immediately as a `binary` frame
-* `separator`: Waits until a variable-length separator is found in the stream and sends data up to and including that position as binary frame. Takes as parameter the separator string. The escape sequences `\r`, `\t`, `\n`, `\0`, `\f` and `\\` are recognized, arbitrary bytes can be specified hexadecimally using `\x<hex>`
-* `newline`: Waits until a newline sequence is found in the stream and sends data up to and including that position as text frame if all data is valid UTF-8 (data frame otherwise). The configuration string may be one of `crlf`, `lfcr`, `lf`, `cr` specifying the sequence to look for.
+* `separator`: Waits until a variable-length separator is found in the stream and sends data up to and including that position as binary frame.
+	Takes as parameter the separator string. The escape sequences `\r`, `\t`, `\n`, `\0`, `\f` and `\\` are recognized, arbitrary bytes may be specified
+	hexadecimally using `\x<hex>`
+* `newline`: Waits until a newline sequence is found in the stream and sends data up to and including that position as text frame if all data is valid
+	UTF-8 (binary frame otherwise). The configuration string may be one of `crlf`, `lfcr`, `lf`, `cr` specifying the sequence to look for.
 
 # Configuration / Usage
 
@@ -111,8 +131,8 @@ The integrated default backend takes the following configuration arguments:
 * `host`: The peer address to connect to
 * `port`: An explicit port specification for the peer (may be inferred from the host if not specified or ignored if not required)
 * `framing`: The name of a framing function to be used (`auto` is used when none is specified)
-* `protocol`: The subprotocol to negotiate with the WebSocket peer. If not set, only the empty protocol set is accepted, which fails clients indicating
-	an explicitly supported subprotocol. The special value `*` matches the first available protocol. 
+* `protocol`: The subprotocol to negotiate with the WebSocket peer. If not set, only the empty protocol set is accepted, which
+	fails clients indicating an explicitly supported subprotocol. The special value `*` matches the first available protocol. 
 * `framing-config`: Arguments to the framing function
 
 # Building
