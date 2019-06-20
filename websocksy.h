@@ -200,6 +200,7 @@ typedef struct /*_ws_backend*/ {
 
 /* Core API */
 ws_framing core_framing(char* name);
+int core_register_framing(char* name, ws_framing func);
 
 /* Internal helper functions */
 char* xstr_lower(char* in);

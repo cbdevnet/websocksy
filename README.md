@@ -3,7 +3,8 @@
 `websocksy` is a highly configurable [WebSocket (RFC6455)](https://tools.ietf.org/html/rfc6455) to 'normal' networking transport (TCP/UDP/Unix sockets) bridge.
 It is written in C and supports pluggable modules for bridge peer selection modules (for dynamic bridging) and stream framing.
 
-It can be used to connect a wide variety of existing applications directly to a website, or to implement new functionality in a way that maintains compatibility between traditional network transports and WebSockets.
+It can be used to connect a wide variety of existing applications directly to a website, or to implement new functionality in a way that maintains compatibility
+between traditional network transports and WebSockets.
 
 ## Table of contents
 
@@ -15,6 +16,7 @@ It can be used to connect a wide variety of existing applications directly to a 
 	* [Command line arguments](#command-line-arguments)
 	* [Configuration file](#configuration-file)
 	* [Default backend](#default-backend)
+	* [Plugins](#plugins)
 * [Building](#building)
 * [Development](#development)
 	* [Peer discovery backend API](#peer-discovery-backend-api)
@@ -104,7 +106,7 @@ at the time.
 
 * `-p <port>`: Set the listen port for incoming WebSocket connections (Default: `8001`)
 * `-l <host>`: Set the host for listening for incoming WebSocket connections (Default: `::`)
-* `-k <seconds>`: Set the inactivity timeout for sending WebSocket keep-alive pings
+* `-k <seconds>`: Set the inactivity timeout for sending WebSocket keep-alive pings (Default: `30`)
 * `-b <backend>`: Select external backend
 * `-c <option>=<value>`: Pass configuration option to backend
 
@@ -135,7 +137,15 @@ The integrated default backend takes the following configuration arguments:
 * `framing`: The name of a framing function to be used (`auto` is used when none is specified)
 * `protocol`: The subprotocol to negotiate with the WebSocket peer. If not set, only the empty protocol set is accepted, which
 	fails clients indicating an explicitly supported subprotocol. The special value `*` matches the first available protocol. 
-* `framing-config`: Arguments to the framing function
+* `framing-config`: Configuration data for the framing function
+
+## Plugins
+
+This repository comes with some plugins already included, in addition to the built-in backend and framing functions.
+Documentation for these resides in the `plugins/` directory.
+
+	* [backend\_file](plugins/backend_file.md)
+	* [framing\_fixedlength](plugins/framing_fixedlength.md)
 
 # Building
 
@@ -174,6 +184,15 @@ From the backend shared object, `websocksy` tries to resolve the following symbo
 	will be `free`'d by the core.
 * `cleanup` (`void cleanup()`): Release all allocated memory. Called in preparation to core shutdown.
 
+The [`file` backend](plugins/backend_file.c) is provided as a reference backend implementation.
+
 ## Peer stream framing API
 
-TBD
+At startup, `websocksy` tries to load all shared objects in the plugin path (`plugins/` by default) that have a file
+name ending in `.so` and not starting with `backend_` (which is reserved for backend plugins, of which only one may be
+loaded at run time). Plugins may declare their own initializer functions using e.g. the compiler's `__attribute__((constructor))`
+syntax or the linker. To register a framing function with the framing function library, the initializer function should call the
+function `core_register_framing(char* name, ws_framing func)`, exported by the core.
+
+An example plugin providing the [`fixedlength` framing function](plugins/framing_fixedlength.c) is provided in the repository.
+Additions to the `websocksy` plugin library are welcome!

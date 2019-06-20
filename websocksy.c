@@ -194,6 +194,10 @@ ws_framing core_framing(char* name){
 	return plugin_framing(name);
 }
 
+int core_register_framing(char* name, ws_framing func){
+	return plugin_register_framing(name, func);
+}
+
 /* Signal handler, attached to SIGINT */
 static void signal_handler(int signum){
 	shutdown_requested = 1;
