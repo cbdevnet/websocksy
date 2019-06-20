@@ -79,11 +79,11 @@ typedef struct /*_ws_http_header*/ {
  * 	* separator: Separate binary frames on a sequence of bytes
  * 	* newline: Forward text frames separated by newlines (\r\n)
  *
- * The separator function is called once for every succesful read from the peer socket and called
+ * The separator function is called once for every successful read from the peer socket and called
  * again when it indicates a frame boundary but there is still data in the buffer.
- * The `framing_data` pointer can be used to store protocol-dependent data on a per-connection basis.
+ * The `framing_data` pointer can be used to store data on a per-connection basis.
  * If the pointer is nonzero when the connection is terminated, the function will be called with a
- * NULL `data` pointer as an indication the any allocation within `framing_data` is to be freed.
+ * NULL `data` pointer as an indication that any allocation within `framing_data` is to be freed.
  * The return value is the number of bytes to be sent to the peer.
  */
 typedef int64_t (*ws_framing)(uint8_t* data, size_t length, size_t last_read, ws_operation* opcode, void** framing_data, const char* config);

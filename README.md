@@ -144,8 +144,8 @@ The integrated default backend takes the following configuration arguments:
 This repository comes with some plugins already included, in addition to the built-in backend and framing functions.
 Documentation for these resides in the `plugins/` directory.
 
-	* [backend\_file](plugins/backend_file.md)
-	* [framing\_fixedlength](plugins/framing_fixedlength.md)
+* [backend\_file](plugins/backend_file.md)
+* [framing\_fixedlength](plugins/framing_fixedlength.md)
 
 # Building
 
@@ -211,7 +211,7 @@ peer). To select the frame type, set the `opcode` argument. The default frame ty
 
 The `framing_data` pointer can be used to store data on a per-connection basis.
 If the pointer is nonzero when the connection is terminated, the function will be called with a NULL `data` pointer
-as an indication the any allocation within `framing_data` is to be freed.
+as an indication that any allocation within `framing_data` is to be freed.
 
 An example plugin providing the [`fixedlength` framing function](plugins/framing_fixedlength.c) is provided in the repository.
 Additions to the `websocksy` plugin library are welcome!
