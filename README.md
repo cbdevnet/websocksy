@@ -104,6 +104,7 @@ at the time.
 
 * `-p <port>`: Set the listen port for incoming WebSocket connections (Default: `8001`)
 * `-l <host>`: Set the host for listening for incoming WebSocket connections (Default: `::`)
+* `-k <seconds>`: Set the inactivity timeout for sending WebSocket keep-alive pings
 * `-b <backend>`: Select external backend
 * `-c <option>=<value>`: Pass configuration option to backend
 
@@ -117,6 +118,7 @@ In the `[core]` section, the following options are recognized:
 
 * `port`: Listen port for incoming WebSocket connections
 * `listen`: Host for incoming WebSocket connections
+* `ping`: Inactivity timeout for WebSocket keep-alive pings in seconds
 * `backend`: External backend selection
 
 In the `[backend]` section, all options are passed directly to the backend and thus are dependent on the specific

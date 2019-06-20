@@ -121,6 +121,7 @@ typedef struct /*_web_socket*/ {
 	uint8_t read_buffer[WS_MAX_LINE];
 	size_t read_buffer_offset;
 	ws_state state;
+	time_t last_event;
 
 	/* HTTP request headers */
 	size_t headers;

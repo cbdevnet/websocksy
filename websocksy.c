@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <time.h>
 
 #include "websocksy.h"
 #include "builtins.h"
@@ -22,7 +23,6 @@
 
 /* TODO
  * - TLS
- * - pings
  * - continuation
  */
 
@@ -46,6 +46,7 @@ char* xstr_lower(char* in){
 static ws_config config = {
 	.host = NULL,
 	.port = NULL,
+	.ping_interval = 30,
 	/* Assign the built-in defaultpeer backend by default */
 	.backend.init = backend_defaultpeer_init,
 	.backend.config = backend_defaultpeer_configure,
@@ -205,8 +206,9 @@ static int usage(char* fn){
 	fprintf(stderr, "\t%s <configuration file>\n", fn);
 	fprintf(stderr, "\t%s [-p <port>] [-l <listen address>] [-b <discovery backend>] [-c <option>=<value>]\n", fn);
 	fprintf(stderr, "Arguments:\n");
-	fprintf(stderr, "\t-p <port>\t\tWebSocket listen port (Current: %s, Default: %s)\n", config.port, DEFAULT_PORT);
-	fprintf(stderr, "\t-l <address>\t\tWebSocket listen address (Current: %s, Default: %s)\n", config.host, DEFAULT_HOST);
+	fprintf(stderr, "\t-p <port>\t\tWebSocket listen port (Current: %s, Default: %s)\n", config.port ? config.port : DEFAULT_PORT, DEFAULT_PORT);
+	fprintf(stderr, "\t-l <address>\t\tWebSocket listen address (Current: %s, Default: %s)\n", config.host ? config.host : DEFAULT_HOST, DEFAULT_HOST);
+	fprintf(stderr, "\t-k <seconds>\t\tKeepalive ping interval (Current: %lu)\n", config.ping_interval);
 	fprintf(stderr, "\t-b <backend>\t\tPeer discovery backend (Default: built-in 'defaultpeer')\n");
 	fprintf(stderr, "\t-c <option>=<value>\tPass configuration options to the peer discovery backend\n");
 	return EXIT_FAILURE;
@@ -273,6 +275,10 @@ int main(int argc, char** argv){
 	fd_set read_fds;
 	size_t n;
 	int listen_fd = -1, status, max_fd;
+	struct timespec current_time;
+	struct timeval select_timeout = {
+		0
+	};
 
 	//register default framing functions before parsing arguments, as they may be assigned within a backend configuration
 	if(plugin_register_framing("auto", framing_auto)
@@ -313,8 +319,14 @@ int main(int argc, char** argv){
 
 	//core loop
 	while(!shutdown_requested){
+		//reset the select timeout
+		select_timeout.tv_sec = config.ping_interval / 2;
+		select_timeout.tv_usec = 0;
+
+		//clear the select set
 		FD_ZERO(&read_fds);
 
+		//push the websocket fd
 		FD_SET(listen_fd, &read_fds);
 		max_fd = listen_fd;
 
@@ -336,18 +348,21 @@ int main(int argc, char** argv){
 		}
 
 		//block until something happens
-		status = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+		status = select(max_fd + 1, &read_fds, NULL, NULL, config.ping_interval ? &select_timeout : NULL);
 		if(status < 0){
 			fprintf(stderr, "Failed to select: %s\n", strerror(errno));
 			break;
 		}
-		else if(status == 0){
-			//timeout in select - ignore for now
-		}
 		else{
+			//update current timestamp
+			if(clock_gettime(CLOCK_MONOTONIC_COARSE, &current_time) < 0){
+				fprintf(stderr, "Failed to update current timestamp\n");
+				break;
+			}
+
 			//new websocket client
 			if(FD_ISSET(listen_fd, &read_fds)){
-				if(ws_accept(listen_fd)){
+				if(ws_accept(listen_fd, current_time.tv_sec)){
 					break;
 				}
 			}
@@ -356,6 +371,7 @@ int main(int argc, char** argv){
 			for(n = 0; n < socks; n++){
 				if(sock[n].ws_fd >= 0){
 					if(FD_ISSET(sock[n].ws_fd, &read_fds)){
+						sock[n].last_event = current_time.tv_sec;
 						if(ws_data(sock + n)){
 							break;
 						}
@@ -364,6 +380,14 @@ int main(int argc, char** argv){
 					if(sock[n].peer_fd >= 0 && FD_ISSET(sock[n].peer_fd, &read_fds)){
 						if(ws_peer_data(sock + n)){
 							break;
+						}
+					}
+
+					//send keep-alive frames
+					if(config.ping_interval &&
+							current_time.tv_sec - sock[n].last_event > config.ping_interval){
+						if(ws_send_frame(sock + n, ws_frame_ping, (uint8_t*) "PING", 4)){
+							ws_close(sock + n, ws_close_unexpected, NULL);
 						}
 					}
 				}

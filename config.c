@@ -22,6 +22,9 @@ static int config_file_line(ws_config* config, char* key, char* value, size_t li
 		free(config->host);
 		config->host = strdup(value);
 	}
+	else if(!strcmp(key, "ping")){
+		config->ping_interval = strtoul(value, NULL, 10);
+	}
 	else if(!strcmp(key, "backend")){
 		//clean up the previously registered backend
 		if(config->backend.cleanup){
@@ -135,6 +138,9 @@ int config_parse_arguments(ws_config* config, int argc, char** argv){
 				break;
 			case 'b':
 				config_file_line(config, "backend", argv[u + 1], 0);
+				break;
+			case 'k':
+				config_file_line(config, "ping", argv[u + 1], 0);
 				break;
 			case 'c':
 				if(!strchr(argv[u + 1], '=')){

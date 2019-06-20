@@ -2,6 +2,7 @@
 typedef struct /*_websocksy_config*/ {
 	char* host;
 	char* port;
+	time_t ping_interval;
 	ws_backend backend;
 } ws_config;
 

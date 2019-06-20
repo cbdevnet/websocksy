@@ -95,10 +95,11 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 }
 
 /* Accept a new WebSocket connection */
-int ws_accept(int listen_fd){
+int ws_accept(int listen_fd, time_t current_time){
 	websocket ws = {
 		.ws_fd = accept(listen_fd, NULL, NULL),
-		.peer_fd = -1
+		.peer_fd = -1,
+		.last_event = current_time
 	};
 
 	return client_register(&ws);
@@ -417,7 +418,6 @@ int ws_send_frame(websocket* ws, ws_operation opcode, uint8_t* data, size_t len)
 	uint16_t* payload_len16 = (uint16_t*) (frame_header + 2);
 	uint64_t* payload_len64 = (uint64_t*) (frame_header + 2);
 
-	//FIXME might want to support segmented transfers here
 	//set up the basic frame header
 	frame_header[0] = WS_FLAG_FIN | opcode;
 	if(len <= 125){
