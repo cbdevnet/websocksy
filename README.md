@@ -67,6 +67,8 @@ framing functions (both built in and loaded from plugins).
 
 * `auto`: Send all data immediately, with the `text` type if the content was detected as valid UTF-8 string, otherwise use a `binary` frame
 * `binary`: Send all data immediately as a `binary` frame
+* `separator`: Waits until a variable-length separator is found in the stream and sends data up to and including that position as binary frame. Takes as parameter the separator string. The escape sequences `\r`, `\t`, `\n`, `\0`, `\f` and `\\` are recognized, arbitrary bytes can be specified hexadecimally using `\x<hex>`
+* `newline`: Waits until a newline sequence is found in the stream and sends data up to and including that position as text frame if all data is valid UTF-8 (data frame otherwise). The configuration string may be one of `crlf`, `lfcr`, `lf`, `cr` specifying the sequence to look for.
 
 # Configuration / Usage
 

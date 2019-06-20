@@ -19,6 +19,10 @@
 #define WS_GET_MASK(a) ((a & 0x80) >> 7)
 #define WS_GET_LEN(a) ((a & 0x7F))
 
+/* 
+ * Close and shut down a WebSocket connection, including a connected
+ * peer stream. Frees all resources associated with either connection.
+ */
 int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	size_t p;
 	ws_peer_info empty_peer = {
@@ -90,6 +94,7 @@ int ws_close(websocket* ws, ws_close_reason code, char* reason){
 	return 0;
 }
 
+/* Accept a new WebSocket connection */
 int ws_accept(int listen_fd){
 	websocket ws = {
 		.ws_fd = accept(listen_fd, NULL, NULL),
@@ -99,6 +104,7 @@ int ws_accept(int listen_fd){
 	return client_register(&ws);
 }
 
+/* Handle data in the NEW state (expecting a HTTP negotiation) */
 static int ws_handle_new(websocket* ws){
 	size_t u;
 	char* path, *proto;
@@ -126,6 +132,7 @@ static int ws_handle_new(websocket* ws){
 	return 0;
 }
 
+/* Handle end of HTTP header data and upgrade the connection */
 static int ws_upgrade_http(websocket* ws){
 	if(ws->websocket_version == 13
 			&& ws->socket_key
@@ -144,7 +151,7 @@ static int ws_upgrade_http(websocket* ws){
 			return 0;
 		}
 
-		//calculate the websocket accept key, which for some reason is defined as
+		//calculate the websocket accept key, which for some reason is defined (RFC 4.2.2.5.4) as
 		//base64(sha1(concat(trim(client-key), "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")))
 		//requiring not one but 2 unnecessarily complex operations
 		size_t encode_offset = 0;
@@ -193,6 +200,7 @@ static int ws_upgrade_http(websocket* ws){
 	return 1;
 }
 
+/* Handle incoming HTTP header lines */
 static int ws_handle_http(websocket* ws){
 	char* header, *value;
 	ssize_t p;
@@ -296,8 +304,8 @@ static size_t ws_frame(websocket* ws){
 		//ignoring it for now
 	}
 
-	//calculate the payload length (could've used a uint64 and be done with it...)
-	//TODO test this for the bigger frames
+	//calculate the payload length from one of 3 cases (RFC 5.2)
+	//could've used a uint64 and be done with it...
 	payload_length = WS_GET_LEN(ws->read_buffer[1]);
 	if(WS_GET_MASK(ws->read_buffer[1])){
 		if(ws->read_buffer_offset < 6){
@@ -401,6 +409,7 @@ static size_t ws_frame(websocket* ws){
 	return ((payload - ws->read_buffer) + payload_length);
 }
 
+/* Construct and send a WebSocket frame */
 int ws_send_frame(websocket* ws, ws_operation opcode, uint8_t* data, size_t len){
 	fprintf(stderr, "Peer -> WS %lu bytes (%02X)\n", len, opcode);
 	uint8_t frame_header[WS_FRAME_HEADER_LEN];
@@ -433,6 +442,7 @@ int ws_send_frame(websocket* ws, ws_operation opcode, uint8_t* data, size_t len)
 	return 0;
 }
 
+/* Handle incoming data on a WebSocket client */
 int ws_data(websocket* ws){
 	ssize_t bytes_read, n, bytes_left = sizeof(ws->read_buffer) - ws->read_buffer_offset;
 	int rv = 0;

@@ -23,6 +23,7 @@
 /* TODO
  * - TLS
  * - pings
+ * - continuation
  */
 
 /* Main loop condition, to be set from signal handler */
@@ -240,9 +241,11 @@ static int ws_peer_data(websocket* ws){
 				fprintf(stderr, "Overrun by framing function, have %lu + %lu bytes, framed %lu\n", ws->peer_buffer_offset, bytes_read, bytes_framed);
 				return 0;
 			}
-			//send the indicated n bytes to the websocket peer
-			if(ws_send_frame(ws, opcode, ws->peer_buffer, bytes_framed)){
-				return 1;
+			if(opcode != ws_frame_discard){
+				//send the indicated n bytes to the websocket peer
+				if(ws_send_frame(ws, opcode, ws->peer_buffer, bytes_framed)){
+					return 1;
+				}
 			}
 			//copy back
 			memmove(ws->peer_buffer, ws->peer_buffer + bytes_framed, (ws->peer_buffer_offset + bytes_read) - bytes_framed);

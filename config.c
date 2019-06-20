@@ -6,11 +6,13 @@
 #include "config.h"
 #include "plugin.h"
 
+/* Configuration file parser state */
 static enum /*_config_file_section*/ {
 	cfg_main,
 	cfg_backend
 } config_section = cfg_main;
 
+/* Evaluate a single line within a configuration file */
 static int config_file_line(ws_config* config, char* key, char* value, size_t line_no){
 	if(!strcmp(key, "port")){
 		free(config->port);
@@ -37,6 +39,7 @@ static int config_file_line(ws_config* config, char* key, char* value, size_t li
 	return 0;
 }
 
+/* Read and parse a configuration file */
 int config_parse_file(ws_config* config, char* filename){
 	ssize_t line_current;
 	size_t line_alloc = 0, line_no = 1, key_len;
@@ -105,6 +108,7 @@ int config_parse_file(ws_config* config, char* filename){
 	return 0;
 }
 
+/* Parse an argument list */
 int config_parse_arguments(ws_config* config, int argc, char** argv){
 	size_t u;
 	char* option = NULL, *value = NULL;

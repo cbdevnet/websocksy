@@ -18,6 +18,7 @@ static char** framing_function_name = NULL;
 static size_t attached_libraries = 0;
 static void** attached_library = NULL;
 
+/* Attach a shared object and register it to be unloaded at shutdown */
 static void* plugin_attach(char* path){
 	void* module = dlopen(path, RTLD_NOW);
 
@@ -39,6 +40,12 @@ static void* plugin_attach(char* path){
 	return module;
 }
 
+/*
+ * Try to load all framing plugins by attaching all shared objects in the
+ * plugin path that
+ * 	* are not backend plugins
+ * 	* have a filename ending in .so
+ */
 int plugin_framing_load(char* path){
 	DIR* directory = opendir(path);
 	struct dirent* file = NULL;
@@ -74,6 +81,10 @@ int plugin_framing_load(char* path){
 	return 0;
 }
 
+/*
+ * Load an external backend plugin by constructing it's module path and attaching it,
+ * then try to resolve the required backend symbols
+ */
 int plugin_backend_load(char* path, char* backend_requested, ws_backend* backend){
 	char plugin_path[MAX_PLUGIN_PATH] = "";
 	void* handle = NULL;
@@ -103,6 +114,7 @@ int plugin_backend_load(char* path, char* backend_requested, ws_backend* backend
 	return 0;
 }
 
+/* Register a new framing function to the library */
 int plugin_register_framing(char* name, ws_framing func){
 	size_t u;
 
@@ -129,6 +141,7 @@ int plugin_register_framing(char* name, ws_framing func){
 	return 0;
 }
 
+/* Query the framing function library */
 ws_framing plugin_framing(char* name){
 	size_t u;
 
@@ -146,6 +159,7 @@ ws_framing plugin_framing(char* name){
 	return plugin_framing("auto");
 }
 
+/* Release all allocated memory, detach all loaded shared objects */
 void plugin_cleanup(){
 	size_t u;
 	

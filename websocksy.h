@@ -36,7 +36,8 @@ typedef enum {
 	ws_frame_binary = 2,
 	ws_frame_close = 8,
 	ws_frame_ping = 9,
-	ws_frame_pong = 10
+	ws_frame_pong = 10,
+	ws_frame_discard /* Special opcode to discard bytes from the peer buffer */
 } ws_operation;
 
 /*
