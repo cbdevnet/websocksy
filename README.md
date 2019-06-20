@@ -184,15 +184,34 @@ From the backend shared object, `websocksy` tries to resolve the following symbo
 	will be `free`'d by the core.
 * `cleanup` (`void cleanup()`): Release all allocated memory. Called in preparation to core shutdown.
 
+Backends should take precautions and offer configuration for WebSocket requests that do not indicate a subprotocol
+(the `protocols` argument to the backend `query` function will be `0`).
+Backends should also provide a method for indicating that any subprotocol indicated is acceptable (and thus the first
+one indicated, if any, will be selected). Idiomatically, this is done by accepting `*` as special value for the protocol
+field.
+
 The [`file` backend](plugins/backend_file.c) is provided as a reference backend implementation.
 
 ## Peer stream framing API
 
 At startup, `websocksy` tries to load all shared objects in the plugin path (`plugins/` by default) that have a file
 name ending in `.so` and not starting with `backend_` (which is reserved for backend plugins, of which only one may be
-loaded at run time). Plugins may declare their own initializer functions using e.g. the compiler's `__attribute__((constructor))`
-syntax or the linker. To register a framing function with the framing function library, the initializer function should call the
-function `core_register_framing(char* name, ws_framing func)`, exported by the core.
+loaded at run time).
+
+Plugins should declare their own initializer functions to be called at load time using e.g. the compiler's
+`__attribute__((constructor))` syntax or the equivalent linker flag.
+
+To register a framing function with the framing function library, the initializer function must use the 
+`core_register_framing(char* name, ws_framing func)` API exported by the core.
+
+The framing function is called once for every successful read from the peer it is used on, and again when it indicates
+a frame boundary which leaves data in the buffer. It must return the number of bytes to be framed and sent to the
+WebSocket client (Returning `0` indicates that the message is not complete and additional data is required from the
+peer). To select the frame type, set the `opcode` argument. The default frame type is `binary` (`ws_frame_binary`).
+
+The `framing_data` pointer can be used to store data on a per-connection basis.
+If the pointer is nonzero when the connection is terminated, the function will be called with a NULL `data` pointer
+as an indication the any allocation within `framing_data` is to be freed.
 
 An example plugin providing the [`fixedlength` framing function](plugins/framing_fixedlength.c) is provided in the repository.
 Additions to the `websocksy` plugin library are welcome!
