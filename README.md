@@ -144,8 +144,9 @@ The integrated default backend takes the following configuration arguments:
 This repository comes with some plugins already included, in addition to the built-in backend and framing functions.
 Documentation for these resides in the `plugins/` directory.
 
-* [backend\_file](plugins/backend_file.md)
-* [framing\_fixedlength](plugins/framing_fixedlength.md)
+* [backend\_file](plugins/backend_file.md) - Read connection peers from dynamic file paths
+* [framing\_fixedlength](plugins/framing_fixedlength.md) - Frame the peer stream using fixed length segments
+* [framing\_json](plugins/framing_json.md) - Segment the peer stream into JSON entities
 
 # Building
 

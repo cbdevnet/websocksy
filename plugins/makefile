@@ -1,5 +1,5 @@
 .PHONY: all clean
-PLUGINS = backend_file.so framing_fixedlength.so
+PLUGINS = backend_file.so framing_fixedlength.so framing_json.so
 
 CFLAGS += -fPIC -g -I../
 LDFLAGS += -shared
