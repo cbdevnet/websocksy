@@ -220,7 +220,11 @@ ws_peer_info query(char* endpoint, size_t protocols, char** protocol, size_t hea
 		//read it
 		for(line_length = getline(&line, &line_alloc, input); line_length >= 0; line_length = getline(&line, &line_alloc, input)){
 			memset(components, 0, sizeof(components));
-			//TODO rtrim line
+			//rtrim line
+			p = strlen(line);
+			for(; p > 0 && !isprint(line[p]); p--){
+				line[p] = 0;
+			}
 
 			//read lines of host subproto framing framing-config
 			components[0] = strchr(line, ' ');

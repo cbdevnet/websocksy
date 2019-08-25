@@ -216,6 +216,8 @@ int64_t framing_separator(uint8_t* data, size_t length, size_t last_read, ws_ope
 						if(!isxdigit(config->separator[u + 2])
 								|| !isxdigit(config->separator[u + 3])){
 							fprintf(stderr, "Prematurely terminated hex byte sequence in separator framing function\n");
+							free(config->separator);
+							free(config);
 							return -1;
 						}
 						sscanf((char*) (config->separator + u + 3), "%02x", &hex);
@@ -227,7 +229,9 @@ int64_t framing_separator(uint8_t* data, size_t length, size_t last_read, ws_ope
 			p++;
 		}
 		config->length = p;
-		*framing_data = config;
+		if(framing_data){
+			*framing_data = config;
+		}
 	}
 	else if(!data && config){
 		//free parsed configuration
@@ -238,7 +242,7 @@ int64_t framing_separator(uint8_t* data, size_t length, size_t last_read, ws_ope
 		return 0;
 	}
 
-	if(config->length){
+	if(config && config->length){
 		for(u = 0; u < last_read && (last_read - u) >= config->length; u++){
 			if(!memcmp(data + (length - last_read) + u, config->separator, config->length)){
 				return (length - last_read) + u + config->length;
@@ -281,6 +285,11 @@ int64_t framing_newline(uint8_t* data, size_t length, size_t last_read, ws_opera
 	}
 	else{
 		bytes = framing_separator(data, length, last_read, opcode, framing_data, NULL);
+	}
+
+	//this should never happen
+	if(bytes < 0){
+		return length;
 	}
 
 	return framing_auto(data, bytes, 0, opcode, NULL, NULL);

@@ -13,11 +13,11 @@
 #define WS_FRAME_HEADER_LEN 16
 
 #define WS_FLAG_FIN 0x80
-#define WS_GET_FIN(a) ((a & WS_FLAG_FIN) >> 7)
-#define WS_GET_RESERVED(a) ((a & 0xE0) >> 4)
-#define WS_GET_OP(a) ((a & 0x0F))
-#define WS_GET_MASK(a) ((a & 0x80) >> 7)
-#define WS_GET_LEN(a) ((a & 0x7F))
+#define WS_GET_FIN(a) (((a) & WS_FLAG_FIN) >> 7)
+#define WS_GET_RESERVED(a) (((a) & 0xE0) >> 4)
+#define WS_GET_OP(a) ((a) & 0x0F)
+#define WS_GET_MASK(a) (((a) & 0x80) >> 7)
+#define WS_GET_LEN(a) ((a) & 0x7F)
 
 /* 
  * Close and shut down a WebSocket connection, including a connected
@@ -165,8 +165,8 @@ static int ws_upgrade_http(websocket* ws){
 		sha1_update(&ws_accept_ctx, strlen(RFC6455_MAGIC_KEY), (uint8_t*) RFC6455_MAGIC_KEY);
 		sha1_digest(&ws_accept_ctx, sizeof(ws_accept_digest), (uint8_t*) &ws_accept_digest);
 		base64_encode_init(&ws_accept_encode);
-		encode_offset = base64_encode_update(&ws_accept_encode, (uint8_t*) ws_accept_key, SHA1_DIGEST_SIZE, ws_accept_digest);
-		encode_offset += base64_encode_final(&ws_accept_encode, (uint8_t*) ws_accept_key + encode_offset);
+		encode_offset = base64_encode_update(&ws_accept_encode, (char*) ws_accept_key, SHA1_DIGEST_SIZE, ws_accept_digest);
+		encode_offset += base64_encode_final(&ws_accept_encode, (char*) ws_accept_key + encode_offset);
 		memcpy(ws_accept_key + encode_offset, "\r\n\0", 3);
 
 		//send websocket accept key

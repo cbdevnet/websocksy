@@ -154,7 +154,7 @@ To build `websocksy`, you need the following things
 
 * A working C compiler
 * `make`
-* `gnutls` and `libnettle` development packages (`libnettle-dev` and `libgnutls28-dev` for Debian, respectively)
+* `gnutls` and `libnettle` development packages (`nettle-dev` and `libgnutls28-dev` for Debian, respectively)
 
 Run `make` in the project directory to build the core binary as well as the default plugins.
 
