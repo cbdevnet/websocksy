@@ -1,6 +1,7 @@
 #include "backend_file.h"
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 //FIXME allocated this statically because i dont want to do it properly right now tbh
 #define BACKEND_FILE_MAX_PATH 8192
