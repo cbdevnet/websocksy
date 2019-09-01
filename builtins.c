@@ -41,21 +41,26 @@ uint64_t backend_defaultpeer_configure(char* key, char* value){
 		free(default_peer.host);
 		default_peer.host = strdup(value);
 		default_peer.transport = peer_transport_detect;
+		return 0;
 	}
 	else if(!strcmp(key, "port")){
 		free(default_peer.port);
 		default_peer.port = strdup(value);
+		return 0;
 	}
 	else if(!strcmp(key, "protocol")){
 		free(default_peer_proto);
 		default_peer_proto = strdup(value);
+		return 0;
 	}
 	else if(!strcmp(key, "framing")){
 		default_peer.framing = plugin_framing(value);
+		return 0;
 	}
 	else if(!strcmp(key, "framing-config")){
 		free(default_peer.framing_config);
 		default_peer.framing_config = strdup(value);
+		return 0;
 	}
 	return 1;
 }
