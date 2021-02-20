@@ -146,6 +146,7 @@ Documentation for these resides in the `plugins/` directory.
 
 * [backend\_file](plugins/backend_file.md) - Read connection peers from dynamic file paths
 * [framing\_fixedlength](plugins/framing_fixedlength.md) - Frame the peer stream using fixed length segments
+* [framing\_dynamic32](plugins/framing_dynamic32.md) - Frame the peer stream using 32bit length fields from the stream itself
 * [framing\_json](plugins/framing_json.md) - Segment the peer stream into JSON entities
 
 # Building
