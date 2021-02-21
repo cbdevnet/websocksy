@@ -53,7 +53,7 @@ static int64_t framing_dynamic32(uint8_t* data, size_t length, size_t last_read,
 		*framing_data = NULL;
 	}
 
-	if(length > conncfg->offset + 4){
+	if(length >= conncfg->offset + 4){
 		//read size field
 		size_p = (uint32_t*) (data + conncfg->offset);
 		size = le32toh(*size_p);
