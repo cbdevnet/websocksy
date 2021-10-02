@@ -13,7 +13,7 @@ plugins:
 
 websocksy: LDFLAGS += -Wl,-export-dynamic
 websocksy: websocksy.c websocksy.h $(OBJECTS) plugins
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $< -o $@ $(OBJECTS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ $(OBJECTS) $(LDLIBS)
 
 clean:
 	$(RM) $(OBJECTS)
